@@ -1,0 +1,41 @@
+name: Android release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build tools
+        shell: pwsh
+        run: sdkmanager "platforms;android-34" "build-tools;37.0.0"
+
+      - name: Build and sign APK
+        shell: pwsh
+        run: |
+          $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+          powershell -ExecutionPolicy Bypass -File wireless\android-app\build_apk.ps1
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wireless/RCN1C_Bridge.apk
+          generate_release_notes: true

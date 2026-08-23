@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Build e artefatti locali
+wireless/android-app/build/
+wireless/android-app/debug.keystore
+*.idsig
+tests/flight_deck_smoke.png
+bridge_out.txt
+bridge_err.txt
+
+# Report generati dalle sonde sperimentali
+wireless/*_report.txt
+
+# Configurazione/segreti locali
+.env
+*.local.json
+
+# Il clone storico ha un proprio repository Git e non fa parte del progetto
+DJI_RCN1_bridge/
