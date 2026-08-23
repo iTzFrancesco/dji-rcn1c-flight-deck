@@ -1,7 +1,10 @@
 package com.drone.rcn1cbridge;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.PendingIntent;
+import android.content.ClipData;
+import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -14,8 +17,10 @@ import android.hardware.usb.UsbEndpoint;
 import android.hardware.usb.UsbInterface;
 import android.hardware.usb.UsbManager;
 import android.net.wifi.WifiManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -35,10 +40,21 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InterfaceAddress;
+import java.net.HttpURLConnection;
 import java.net.NetworkInterface;
 import java.net.SocketTimeoutException;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.IOException;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -63,6 +79,11 @@ public class MainActivity extends Activity {
     private static final int DISCOVERY_PORT = 26790;
     private static final int VENDOR_DJI = 0x2CA3;
     private static final String ACTION_USB_PERMISSION = "com.drone.rcn1cbridge.USB_PERMISSION";
+    private static final String APP_VERSION = "3.1.0";
+    private static final String UPDATE_API =
+            "https://api.github.com/repos/iTzFrancesco/dji-rcn1c-flight-deck/releases/latest";
+    private static final String RELEASE_ASSET_PREFIX =
+            "https://github.com/iTzFrancesco/dji-rcn1c-flight-deck/";
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -78,7 +99,7 @@ public class MainActivity extends Activity {
 
     private TextView status, stats;
     private EditText ipEdit, portEdit;
-    private Button goBtn;
+    private Button goBtn, updateBtn;
     private StickPadView padL, padR;
     private StripChartView chartL, chartR;
 
@@ -196,7 +217,7 @@ public class MainActivity extends Activity {
         status.setTextColor(0xFFE6EDF3);
         status.setTextSize(13);
         status.setPadding(dp(4), dp(2), dp(4), dp(6));
-        status.setText("RC-N1C Bridge 3.0.0 - Premi AVVIA: il PC viene cercato automaticamente.");
+        status.setText("RC-N1C Bridge 3.1.0 - Premi AVVIA: il PC viene cercato automaticamente.");
         root.addView(status);
 
         LinearLayout row = new LinearLayout(this);
@@ -223,6 +244,15 @@ public class MainActivity extends Activity {
         row.addView(goBtn, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(row);
+
+        LinearLayout updateRow = new LinearLayout(this);
+        updateRow.setGravity(Gravity.RIGHT);
+        updateBtn = new Button(this);
+        updateBtn.setText("CONTROLLA AGGIORNAMENTI");
+        updateBtn.setOnClickListener(v -> checkForUpdate());
+        updateRow.addView(updateBtn, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(updateRow);
 
         LinearLayout pads = new LinearLayout(this);
         padL = new StickPadView(this, 0xFF39C5FF);
@@ -287,6 +317,147 @@ public class MainActivity extends Activity {
         } else {
             startBridge();
         }
+    }
+
+    private void checkForUpdate() {
+        if (!updateBtn.isEnabled()) return;
+        updateBtn.setEnabled(false);
+        status.setText("Controllo aggiornamenti GitHub...");
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                URL endpoint = new URL(UPDATE_API);
+                connection = (HttpURLConnection) endpoint.openConnection();
+                connection.setConnectTimeout(12000);
+                connection.setReadTimeout(12000);
+                connection.setRequestProperty("Accept", "application/vnd.github+json");
+                connection.setRequestProperty("User-Agent", "RCN1C-Flight-Deck/" + APP_VERSION);
+                if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                    throw new IOException("GitHub HTTP " + connection.getResponseCode());
+                }
+                String json = readText(connection.getInputStream());
+                String tag = jsonValue(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
+                String assetUrl = jsonValue(json,
+                        "\"name\"\\s*:\\s*\"RCN1C_Bridge\\.apk\".*?"
+                                + "\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"");
+                if (tag == null || assetUrl == null || !assetUrl.startsWith(RELEASE_ASSET_PREFIX)) {
+                    throw new IOException("release APK non trovata");
+                }
+                String remoteVersion = tag.startsWith("v") ? tag.substring(1) : tag;
+                int comparison = compareVersions(remoteVersion, APP_VERSION);
+                final String finalRemoteVersion = remoteVersion;
+                final String finalAssetUrl = assetUrl;
+                ui.post(() -> {
+                    updateBtn.setEnabled(true);
+                    if (comparison <= 0) {
+                        status.setText("App aggiornata: v" + APP_VERSION);
+                        toast("Hai già l'ultima versione (v" + APP_VERSION + ")");
+                        return;
+                    }
+                    new AlertDialog.Builder(this)
+                            .setTitle("Aggiornamento disponibile")
+                            .setMessage("È disponibile RC-N1C Bridge v" + finalRemoteVersion
+                                    + ". Vuoi scaricare l'APK?")
+                            .setNegativeButton("ANNULLA", null)
+                            .setPositiveButton("SCARICA", (dialog, which) ->
+                                    downloadApk(finalRemoteVersion, finalAssetUrl))
+                            .show();
+                });
+            } catch (Exception error) {
+                ui.post(() -> {
+                    updateBtn.setEnabled(true);
+                    status.setText("Aggiornamento non disponibile");
+                    toast("Controllo aggiornamenti fallito: " + error.getMessage());
+                });
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }, "rc-update-check").start();
+    }
+
+    private void downloadApk(String version, String downloadUrl) {
+        if (!downloadUrl.startsWith(RELEASE_ASSET_PREFIX)) {
+            toast("URL aggiornamento non attendibile");
+            return;
+        }
+        updateBtn.setEnabled(false);
+        status.setText("Scarico RC-N1C Bridge v" + version + "...");
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                File directory = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                if (directory == null) throw new IOException("cartella download non disponibile");
+                if (!directory.exists() && !directory.mkdirs()) {
+                    throw new IOException("impossibile creare la cartella download");
+                }
+                File apk = new File(directory, "RCN1C_Bridge-" + version + ".apk");
+                URL endpoint = new URL(downloadUrl);
+                connection = (HttpURLConnection) endpoint.openConnection();
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(30000);
+                connection.setInstanceFollowRedirects(true);
+                connection.setRequestProperty("User-Agent", "RCN1C-Flight-Deck/" + APP_VERSION);
+                if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                    throw new IOException("download HTTP " + connection.getResponseCode());
+                }
+                try (InputStream input = new BufferedInputStream(connection.getInputStream());
+                     FileOutputStream output = new FileOutputStream(apk)) {
+                    byte[] buffer = new byte[8192];
+                    int n;
+                    while ((n = input.read(buffer)) != -1) output.write(buffer, 0, n);
+                }
+                if (apk.length() < 10000) throw new IOException("APK scaricata non valida");
+                ApkFileProvider.setSharedFile(apk);
+                Uri uri = ApkFileProvider.uriFor(apk);
+                Intent install = new Intent(Intent.ACTION_VIEW);
+                install.setDataAndType(uri, "application/vnd.android.package-archive");
+                install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                install.setClipData(ClipData.newRawUri("RCN1C_Bridge", uri));
+                ui.post(() -> {
+                    updateBtn.setEnabled(true);
+                    status.setText("APK pronta: conferma l'installazione di v" + version);
+                    try {
+                        startActivity(install);
+                    } catch (ActivityNotFoundException error) {
+                        toast("Nessun installatore APK disponibile");
+                    }
+                });
+            } catch (Exception error) {
+                ui.post(() -> {
+                    updateBtn.setEnabled(true);
+                    status.setText("Download aggiornamento fallito");
+                    toast("Download fallito: " + error.getMessage());
+                });
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }, "rc-update-download").start();
+    }
+
+    private static String readText(InputStream input) throws IOException {
+        try (InputStream source = input; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int n;
+            while ((n = source.read(buffer)) != -1) output.write(buffer, 0, n);
+            return new String(output.toByteArray(), "UTF-8");
+        }
+    }
+
+    private static String jsonValue(String json, String expression) {
+        Matcher matcher = Pattern.compile(expression, Pattern.DOTALL).matcher(json);
+        return matcher.find() ? matcher.group(1).replace("\\/", "/") : null;
+    }
+
+    private static int compareVersions(String left, String right) {
+        String[] a = left.split("\\.");
+        String[] b = right.split("\\.");
+        int count = Math.max(a.length, b.length);
+        for (int i = 0; i < count; i++) {
+            int av = i < a.length ? Integer.parseInt(a[i].replaceAll("[^0-9].*", "")) : 0;
+            int bv = i < b.length ? Integer.parseInt(b[i].replaceAll("[^0-9].*", "")) : 0;
+            if (av != bv) return av < bv ? -1 : 1;
+        }
+        return 0;
     }
 
     private void startBridge() {

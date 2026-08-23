@@ -62,14 +62,16 @@ Non avviare contemporaneamente i due receiver Wi-Fi: entrambi utilizzano la port
 
 ## Aggiornamenti
 
-Il progetto include un controllo degli aggiornamenti basato sulle release GitHub:
+L'app Android include il pulsante **CONTROLLA AGGIORNAMENTI**. Controlla la release GitHub più recente e, se trova una versione nuova, chiede conferma prima di scaricare e aprire l'installazione dell'APK. Android richiede sempre la conferma dell'utente per un APK installato fuori dallo store.
+
+Su Windows è disponibile anche il controllo da PowerShell:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1
 powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1 -InstallApk
 ```
 
-Il workflow `.github/workflows/release.yml` ricostruisce e pubblica l'APK quando viene creato un tag versione, per esempio `v3.0.0`. Il controllo verifica la versione della release e l'hash SHA-256 dell'APK quando disponibile.
+Il workflow `.github/workflows/release.yml` ricostruisce e pubblica l'APK quando viene creato un tag versione, per esempio `v3.1.0`. Il controllo verifica la versione della release e l'hash SHA-256 dell'APK quando disponibile.
 
 ## Sviluppo e test
 
