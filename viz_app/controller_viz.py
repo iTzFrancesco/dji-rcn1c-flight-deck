@@ -1,7 +1,8 @@
 """
 DJI RC-N1C Control Center - visualizzatore real-time degli input.
 
-Avvio:  python controller_viz.py                 (modalita' seriale USB, poi si apre http://127.0.0.1:8123)
+Avvio:  python controller_viz.py                 (modalita' seriale USB, solo dashboard)
+        python controller_viz.py --gamepad       (USB + dashboard + gamepad Xbox virtuale)
         python controller_viz.py --source udp    (modalita' WiFi: riceve i frame dal telefono,
                                                   crea anche il gamepad Xbox virtuale)
 
@@ -9,7 +10,7 @@ Architettura:
   - thread sorgente: seriale VCOM (come il bridge) OPPURE socket UDP del ponte telefono
   - thread HTTP: serve la dashboard (cartella static/)
   - WebSocket: strema snapshot JSON dei canali ai client connessi
-  - opzionale (--source udp): thread gamepad -> ViGEm
+  - opzionale: thread gamepad -> ViGEm
 """
 import argparse
 import asyncio
@@ -274,14 +275,14 @@ def udp_loop(port):
         )
 
 
-def gamepad_loop():
+def gamepad_loop(source='WiFi'):
     import vgamepad as vg
     try:
         gp = vg.VX360Gamepad()
     except Exception as e:
         print(f'[VIZ] gamepad non disponibile: {e}')
         return
-    print('[VIZ] Controller Xbox 360 virtuale creato (modalita WiFi)')
+    print(f'[VIZ] Controller Xbox 360 virtuale creato (sorgente {source})')
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from dji_rcn1c_bridge import Bridge as DjiBridge
     logic = DjiBridge()
@@ -394,6 +395,7 @@ async def main_async(args):
         print(f'[ERRORE] porta HTTP {HTTP_PORT} occupata: {e}')
         print('Chiudi la vecchia scheda/istanza e riprova.')
         return
+
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     print(f'[VIZ] Dashboard:  http://127.0.0.1:{HTTP_PORT}')
     print(f'[VIZ] WebSocket:  ws://127.0.0.1:{WS_PORT}')
@@ -409,14 +411,20 @@ async def main_async(args):
         print('Chiudi la vecchia istanza e riprova.')
 
 
+def should_start_gamepad(source, no_gamepad=False, gamepad=False):
+    return not no_gamepad and (source == 'udp' or gamepad)
+
+
 def main():
     parser = argparse.ArgumentParser(description='DJI RC-N1C Control Center')
     parser.add_argument('--source', choices=['serial', 'udp'], default='serial',
                         help='sorgente dati: seriale USB (default) o UDP dal telefono')
     parser.add_argument('--porta', type=int, default=DEFAULT_UDP_PORT,
                         help=f'porta UDP in modalita\' udp (default: {DEFAULT_UDP_PORT})')
+    parser.add_argument('--gamepad', action='store_true',
+                        help='in modalita\' seriale crea il gamepad virtuale')
     parser.add_argument('--no-gamepad', action='store_true',
-                        help='in modalita\' udp non creare il gamepad virtuale')
+                        help='non creare il gamepad virtuale')
     parser.add_argument('--no-browser', action='store_true',
                         help='non aprire il browser automaticamente')
     args = parser.parse_args()
@@ -424,14 +432,16 @@ def main():
     if args.source == 'udp':
         threading.Thread(target=discovery_responder, daemon=True).start()
         threading.Thread(target=udp_loop, args=(args.porta,), daemon=True).start()
-        if not args.no_gamepad:
-            threading.Thread(target=gamepad_loop, daemon=True).start()
         print('[VIZ] se il telefono non si connette: consenti Python nel firewall Windows '
               '(reti private) oppure crea la regola:')
         print(f'      netsh advfirewall firewall add rule name="RC-N1C WiFi UDP" dir=in action=allow '
               f'protocol=UDP localport={args.porta} profile=private')
     else:
         threading.Thread(target=serial_loop, daemon=True).start()
+
+    if should_start_gamepad(args.source, args.no_gamepad, args.gamepad):
+        source_label = 'USB' if args.source == 'serial' else 'WiFi'
+        threading.Thread(target=gamepad_loop, args=(source_label,), daemon=True).start()
 
     try:
         asyncio.run(main_async(args))

@@ -39,6 +39,10 @@ Chiudi eventuali applicazioni DJI che possono occupare la connessione USB, poi u
 - `viz_app\AVVIA_VIZ.bat` — apre la dashboard e rileva automaticamente il radiocomando;
 - `AVVIA_BUTTON_LIVE_PROBE.bat` — mostra i pulsanti rilevati senza creare un gamepad.
 
+Il collegamento `RC-N1C Dashboard.vbs` sul Desktop è il launcher con un click: rileva USB o Wi-Fi,
+apre la dashboard e crea automaticamente il controller Xbox virtuale. In modalità USB usa un solo
+processo, così la porta COM4 non viene aperta contemporaneamente da dashboard e bridge.
+
 La dashboard è locale e non utilizza servizi o risorse esterne.
 
 ## Demo

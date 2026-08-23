@@ -21,6 +21,7 @@ TESTS = [
     'test_phone_tx.py',
     'test_receiver.py',
     'test_dashboard_udp.py',
+    'test_dashboard_modes.py',
 ]
 
 fails = 0
