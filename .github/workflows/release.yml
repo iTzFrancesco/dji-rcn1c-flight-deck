@@ -31,7 +31,8 @@ jobs:
       - name: Build and sign APK
         shell: pwsh
         run: |
-          $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+          # setup-android exposes the runner SDK through ANDROID_SDK_ROOT.
+          $env:ANDROID_HOME = $env:ANDROID_SDK_ROOT
           powershell -ExecutionPolicy Bypass -File wireless\android-app\build_apk.ps1
 
       - name: Publish GitHub release
