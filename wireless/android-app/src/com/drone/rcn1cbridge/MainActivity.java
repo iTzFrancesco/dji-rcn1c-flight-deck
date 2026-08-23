@@ -196,7 +196,7 @@ public class MainActivity extends Activity {
         status.setTextColor(0xFFE6EDF3);
         status.setTextSize(13);
         status.setPadding(dp(4), dp(2), dp(4), dp(6));
-        status.setText("RC-N1C Bridge 3.0 - Premi AVVIA: il PC viene cercato automaticamente.");
+        status.setText("RC-N1C Bridge 3.0.0 - Premi AVVIA: il PC viene cercato automaticamente.");
         root.addView(status);
 
         LinearLayout row = new LinearLayout(this);
