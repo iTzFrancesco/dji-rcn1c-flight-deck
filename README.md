@@ -41,6 +41,12 @@ Chiudi eventuali applicazioni DJI che possono occupare la connessione USB, poi u
 
 La dashboard è locale e non utilizza servizi o risorse esterne.
 
+## Demo
+
+[![Anteprima della dashboard RC-N1C Flight Deck](docs/media/flight-deck-demo.gif)](docs/media/flight-deck-demo.mp4)
+
+Clicca sull’anteprima per aprire la registrazione completa.
+
 ## Modalità wireless
 
 Il telefono può funzionare da ponte tra radiocomando e PC:
