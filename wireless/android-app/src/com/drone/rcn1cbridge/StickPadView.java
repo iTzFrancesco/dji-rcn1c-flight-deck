@@ -10,8 +10,10 @@ public class StickPadView extends View {
     public static final int RAW_SPAN_HALF = 660;
 
     private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint surface = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint cross = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint dot = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint dotRing = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private float nx = 0f, ny = 0f;
@@ -20,15 +22,22 @@ public class StickPadView extends View {
     public StickPadView(Context c, int dotColor) {
         super(c);
         ring.setStyle(Paint.Style.STROKE);
-        ring.setStrokeWidth(dp(2));
-        ring.setColor(0xFF3A4453);
+        ring.setStrokeWidth(dp(2.5f));
+        ring.setColor(0xFF42566D);
+        surface.setStyle(Paint.Style.FILL);
+        surface.setColor(0xFF111923);
         cross.setStrokeWidth(dp(1.25f));
         cross.setColor(0xFF242C38);
         dot.setColor(dotColor);
-        dot.setShadowLayer(dp(8), 0, 0, dotColor);
+        dot.setShadowLayer(dp(10), 0, 0, dotColor);
+        dotRing.setStyle(Paint.Style.STROKE);
+        dotRing.setStrokeWidth(dp(2));
+        dotRing.setColor(dotColor);
+        dotRing.setAlpha(170);
         setLayerType(LAYER_TYPE_SOFTWARE, null);
         text.setColor(0xFF8B98A8);
-        text.setTextSize(dp(12));
+        text.setTextSize(dp(11));
+        text.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
     }
 
     private float dp(float v) {
@@ -60,13 +69,16 @@ public class StickPadView extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         float cx = getWidth() / 2f, cy = getHeight() / 2f;
-        float r = Math.min(getWidth(), getHeight()) / 2f - dp(10);
+        float r = Math.min(getWidth(), getHeight()) / 2f - dp(14);
+        canvas.drawCircle(cx, cy, r, surface);
         canvas.drawCircle(cx, cy, r, ring);
         canvas.drawLine(cx - r, cy, cx + r, cy, cross);
         canvas.drawLine(cx, cy - r, cx, cy + r, cross);
-        canvas.drawCircle(cx + nx * r, cy - ny * r, dp(14), dot);
+        float px = cx + nx * r, py = cy - ny * r;
+        canvas.drawCircle(px, py, dp(20), dotRing);
+        canvas.drawCircle(px, py, dp(15), dot);
         if (!label.isEmpty()) {
-            canvas.drawText(label, dp(8), dp(16), text);
+            canvas.drawText(label, dp(10), dp(20), text);
         }
     }
 }

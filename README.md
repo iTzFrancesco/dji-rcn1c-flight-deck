@@ -62,7 +62,7 @@ Non avviare contemporaneamente i due receiver Wi-Fi: entrambi utilizzano la port
 
 ## Aggiornamenti
 
-L'app Android include il pulsante **CONTROLLA AGGIORNAMENTI**. Controlla la release GitHub più recente e, se trova una versione nuova, chiede conferma prima di scaricare e aprire l'installazione dell'APK. Android richiede sempre la conferma dell'utente per un APK installato fuori dallo store.
+L'app Android esegue all'avvio un controllo iniziale della versione e della presenza del radiocomando, senza avviare automaticamente il bridge. Il pulsante **AVVIA** resta sempre manuale. Da **Impostazioni** è possibile modificare IP/porta e lanciare **CONTROLLA AGGIORNAMENTI**: se trova una versione nuova, chiede conferma prima di scaricare e aprire l'installazione dell'APK. Android richiede sempre la conferma dell'utente per un APK installato fuori dallo store.
 
 Su Windows è disponibile anche il controllo da PowerShell:
 
@@ -71,7 +71,7 @@ powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1
 powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1 -InstallApk
 ```
 
-Il workflow `.github/workflows/release.yml` ricostruisce e pubblica l'APK quando viene creato un tag versione, per esempio `v3.1.0`. Il controllo verifica la versione della release e l'hash SHA-256 dell'APK quando disponibile.
+Il workflow `.github/workflows/release.yml` ricostruisce e pubblica l'APK quando viene creato un tag versione, per esempio `v3.2.0`. Il controllo verifica la versione della release e l'hash SHA-256 dell'APK quando disponibile.
 
 ## Sviluppo e test
 

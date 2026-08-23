@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.graphics.drawable.GradientDrawable;
 import android.hardware.usb.UsbConstants;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
@@ -33,6 +34,7 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -79,13 +81,14 @@ public class MainActivity extends Activity {
     private static final int DISCOVERY_PORT = 26790;
     private static final int VENDOR_DJI = 0x2CA3;
     private static final String ACTION_USB_PERMISSION = "com.drone.rcn1cbridge.USB_PERMISSION";
-    private static final String APP_VERSION = "3.1.0";
+    private static final String APP_VERSION = "3.2.0";
     private static final String UPDATE_API =
             "https://api.github.com/repos/iTzFrancesco/dji-rcn1c-flight-deck/releases/latest";
     private static final String RELEASE_ASSET_PREFIX =
             "https://github.com/iTzFrancesco/dji-rcn1c-flight-deck/";
 
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean checkingUpdate = new AtomicBoolean(false);
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     private volatile int vRx = StickPadView.RAW_CENTER, vRy = StickPadView.RAW_CENTER;
@@ -97,9 +100,9 @@ public class MainActivity extends Activity {
     private volatile String deviceName = "";
     private volatile String destText = "-";
 
-    private TextView status, stats;
+    private TextView status, versionHint, stats;
     private EditText ipEdit, portEdit;
-    private Button goBtn, updateBtn;
+    private Button goBtn, updateBtn, settingsBtn;
     private StickPadView padL, padR;
     private StripChartView chartL, chartR;
 
@@ -161,11 +164,12 @@ public class MainActivity extends Activity {
         }
 
         SharedPreferences p = getSharedPreferences("cfg", MODE_PRIVATE);
-        ipEdit.setText("");
+        ipEdit.setText(p.getString("ip", ""));
         portEdit.setText(p.getString("port", String.valueOf(DEFAULT_PORT)));
 
         handleAttach(getIntent());
         startTicker();
+        runStartupChecks();
     }
 
     @Override
@@ -190,10 +194,8 @@ public class MainActivity extends Activity {
         UsbDevice dev = intent != null ? intent.getParcelableExtra(UsbManager.EXTRA_DEVICE) : null;
         if (dev != null) {
             deviceName = dev.getProductName() != null ? dev.getProductName() : dev.getDeviceName();
+            status.setText("RC rilevato · premi AVVIA");
             Toast.makeText(this, "RC rilevato: " + deviceName, Toast.LENGTH_SHORT).show();
-            if (!running.get()) {
-                ui.post(this::startBridge);
-            }
         }
     }
 
@@ -210,79 +212,97 @@ public class MainActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(10), dp(10), dp(10), dp(10));
-        root.setBackgroundColor(0xFF0E1116);
+        root.setPadding(dp(12), dp(10), dp(12), dp(8));
+        root.setBackgroundColor(0xFF0B0F14);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setMinimumHeight(dp(48));
+
+        LinearLayout titleBlock = new LinearLayout(this);
+        titleBlock.setOrientation(LinearLayout.VERTICAL);
+        titleBlock.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView title = new TextView(this);
+        title.setText("RC-N1C FLIGHT DECK  ·  v" + APP_VERSION);
+        title.setTextColor(0xFFEAF2FF);
+        title.setTextSize(15);
+        title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        title.setLetterSpacing(0.06f);
+        titleBlock.addView(title);
 
         status = new TextView(this);
-        status.setTextColor(0xFFE6EDF3);
-        status.setTextSize(13);
-        status.setPadding(dp(4), dp(2), dp(4), dp(6));
-        status.setText("RC-N1C Bridge 3.1.0 - Premi AVVIA: il PC viene cercato automaticamente.");
-        root.addView(status);
+        status.setTextColor(0xFF92A4B8);
+        status.setTextSize(11);
+        status.setSingleLine(true);
+        status.setText("Pronto · collega il radiocomando e premi AVVIA");
+        titleBlock.addView(status);
+        header.addView(titleBlock, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        ipEdit = new EditText(this);
-        ipEdit.setHint("IP PC opzionale (AUTO se vuoto)");
-        ipEdit.setInputType(InputType.TYPE_CLASS_PHONE);
-        ipEdit.setTextColor(0xFFE6EDF3);
-        ipEdit.setHintTextColor(0xFF5A6572);
-        LinearLayout.LayoutParams ipLp = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        row.addView(ipEdit, ipLp);
+        LinearLayout headerActions = new LinearLayout(this);
+        headerActions.setGravity(Gravity.CENTER_VERTICAL);
 
-        portEdit = new EditText(this);
-        portEdit.setInputType(InputType.TYPE_CLASS_NUMBER);
-        portEdit.setTextColor(0xFFE6EDF3);
-        portEdit.setHintTextColor(0xFF5A6572);
-        portEdit.setHint("porta");
-        row.addView(portEdit, new LinearLayout.LayoutParams(dp(86), ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        goBtn = new Button(this);
-        goBtn.setText("AVVIA");
+        goBtn = styledButton("AVVIA", 0xFF123B32, 0xFF2ED573);
+        goBtn.setTextSize(11);
         goBtn.setOnClickListener(v -> toggle());
-        row.addView(goBtn, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(row);
+        LinearLayout.LayoutParams goLp = new LinearLayout.LayoutParams(dp(112), dp(44));
+        goLp.setMargins(0, 0, dp(6), 0);
+        headerActions.addView(goBtn, goLp);
 
-        LinearLayout updateRow = new LinearLayout(this);
-        updateRow.setGravity(Gravity.RIGHT);
-        updateBtn = new Button(this);
-        updateBtn.setText("CONTROLLA AGGIORNAMENTI");
-        updateBtn.setOnClickListener(v -> checkForUpdate());
-        updateRow.addView(updateBtn, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(updateRow);
+        settingsBtn = styledButton("\u2699", 0xFF172332, 0xFF2E9DCE);
+        settingsBtn.setTextSize(21);
+        settingsBtn.setContentDescription("Impostazioni");
+        settingsBtn.setPadding(0, 0, 0, dp(2));
+        settingsBtn.setOnClickListener(v -> showSettings());
+        headerActions.addView(settingsBtn, new LinearLayout.LayoutParams(dp(52), dp(44)));
+        header.addView(headerActions);
+        root.addView(header);
+
+        versionHint = new TextView(this);
+        versionHint.setTextColor(0xFF5F7288);
+        versionHint.setTextSize(10);
+        versionHint.setSingleLine(true);
+        versionHint.setPadding(dp(2), 0, dp(2), dp(4));
+        versionHint.setText("Controllo iniziale in corso...");
+        root.addView(versionHint);
+
+        ipEdit = settingsField("IP PC (vuoto = AUTO)", InputType.TYPE_CLASS_PHONE);
+        portEdit = settingsField("Porta", InputType.TYPE_CLASS_NUMBER);
 
         LinearLayout pads = new LinearLayout(this);
+        pads.setGravity(Gravity.CENTER);
+        pads.setPadding(0, dp(2), 0, dp(2));
         padL = new StickPadView(this, 0xFF39C5FF);
-        padL.setLabel("SX  throttle/yaw");
+        padL.setLabel("THROTTLE / YAW");
         padR = new StickPadView(this, 0xFFFF9F43);
-        padR.setLabel("DX  pitch/roll");
-        pads.addView(padL, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.15f));
-        pads.addView(padR, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.15f));
+        padR.setLabel("PITCH / ROLL");
+        pads.addView(padL, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+        pads.addView(padR, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         root.addView(pads, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 2.3f));
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout charts = new LinearLayout(this);
-        charts.setPadding(0, dp(6), 0, dp(4));
+        charts.setPadding(0, dp(4), 0, dp(2));
         chartL = new StripChartView(this, 0xFF39C5FF, 0xFF2ED573);
         chartR = new StripChartView(this, 0xFFFF9F43, 0xFFFFD166);
         charts.addView(chartL, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         charts.addView(chartR, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         root.addView(charts, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
 
         stats = new TextView(this);
-        stats.setTextColor(0xFF8B98A8);
-        stats.setTextSize(12);
+        stats.setTextColor(0xFF8294A8);
+        stats.setTextSize(10);
+        stats.setSingleLine(true);
         stats.setTypeface(android.graphics.Typeface.MONOSPACE);
-        stats.setPadding(dp(4), dp(8), dp(4), dp(2));
+        stats.setPadding(dp(2), dp(2), dp(2), dp(2));
         stats.setText("Inviati 0   scarti 0   0 pkt/s   RTT 0.0 ms");
         root.addView(stats);
 
         LinearLayout chips = new LinearLayout(this);
-        chips.setPadding(dp(4), dp(2), dp(4), dp(4));
+        chips.setGravity(Gravity.CENTER_VERTICAL);
+        chips.setPadding(0, dp(2), 0, dp(3));
         chipRotL = mkChip(chips, "ROT ◀");
         chipRotR = mkChip(chips, "ROT ▶");
         chipShutter = mkChip(chips, "SCATTO");
@@ -290,25 +310,183 @@ public class MainActivity extends Activity {
         chipRth = mkChip(chips, "RTH");
         chipFn = mkChip(chips, "FN");
         chipMode = mkChip(chips, "NORMAL");
-        root.addView(chips);
+        root.addView(chips, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(27)));
 
         setContentView(root);
+    }
+
+    private Button styledButton(String label, int fill, int stroke) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextColor(0xFFEAF2FF);
+        button.setTextSize(12);
+        button.setAllCaps(false);
+        button.setGravity(Gravity.CENTER);
+        button.setMinHeight(dp(42));
+        button.setMinWidth(0);
+        button.setStateListAnimator(null);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(fill);
+        background.setCornerRadius(dp(12));
+        background.setStroke(dp(1), stroke);
+        button.setBackground(background);
+        return button;
+    }
+
+    private EditText settingsField(String hint, int inputType) {
+        EditText field = new EditText(this);
+        field.setHint(hint);
+        field.setInputType(inputType);
+        field.setSingleLine(true);
+        field.setTextColor(0xFFE6EDF3);
+        field.setHintTextColor(0xFF6D7D90);
+        field.setTextSize(14);
+        field.setPadding(dp(12), 0, dp(12), 0);
+        return field;
+    }
+
+    private void updateGoButton() {
+        if (goBtn == null) return;
+        GradientDrawable background = new GradientDrawable();
+        background.setCornerRadius(dp(12));
+        if (running.get()) {
+            goBtn.setText("FERMA");
+            goBtn.setTextColor(0xFFFFD9D9);
+            background.setColor(0xFF4A1D24);
+            background.setStroke(dp(1), 0xFFFF5A67);
+        } else {
+            goBtn.setText("AVVIA");
+            goBtn.setTextColor(0xFFEAF2FF);
+            background.setColor(0xFF123B32);
+            background.setStroke(dp(1), 0xFF2ED573);
+        }
+        goBtn.setBackground(background);
+    }
+
+    private void showSettings() {
+        String currentIp = ipEdit != null ? ipEdit.getText().toString() : "";
+        String currentPort = portEdit != null ? portEdit.getText().toString() : String.valueOf(DEFAULT_PORT);
+        ipEdit = settingsField("IP PC (vuoto = AUTO)", InputType.TYPE_CLASS_PHONE);
+        ipEdit.setText(currentIp);
+        portEdit = settingsField("Porta", InputType.TYPE_CLASS_NUMBER);
+        portEdit.setText(currentPort);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(4), 0, dp(4), 0);
+
+        TextView hint = new TextView(this);
+        hint.setText("Connessione PC\nIP vuoto = rilevamento automatico nella rete locale");
+        hint.setTextColor(0xFF8FA1B4);
+        hint.setTextSize(12);
+        hint.setPadding(0, 0, 0, dp(12));
+        panel.addView(hint);
+
+        panel.addView(ipEdit, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+        LinearLayout.LayoutParams portLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        portLp.topMargin = dp(8);
+        panel.addView(portEdit, portLp);
+
+        updateBtn = styledButton("CONTROLLA AGGIORNAMENTI", 0xFF172332, 0xFF2E9DCE);
+        updateBtn.setOnClickListener(v -> checkForUpdate(true, updateBtn));
+        LinearLayout.LayoutParams updateLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(44));
+        updateLp.topMargin = dp(16);
+        panel.addView(updateBtn, updateLp);
+
+        TextView buildInfo = new TextView(this);
+        buildInfo.setText("Versione installata: v" + APP_VERSION
+                + "\nIl download di una nuova APK richiede la conferma di Android.");
+        buildInfo.setTextColor(0xFF697B90);
+        buildInfo.setTextSize(11);
+        buildInfo.setPadding(0, dp(12), 0, 0);
+        panel.addView(buildInfo);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(panel);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Impostazioni")
+                .setView(scroll)
+                .setNegativeButton("ANNULLA", null)
+                .setPositiveButton("SALVA", (d, which) -> saveSettings())
+                .create();
+        dialog.setOnShowListener(d -> {
+            if (dialog.getWindow() != null) {
+                GradientDrawable background = new GradientDrawable();
+                background.setColor(0xFF151C24);
+                background.setCornerRadius(dp(14));
+                dialog.getWindow().setBackgroundDrawable(background);
+                dialog.getWindow().setLayout(
+                        (int) (getResources().getDisplayMetrics().widthPixels * 0.82f),
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+            }
+            Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            if (positive != null) positive.setTextColor(0xFF39C5FF);
+            Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+            if (negative != null) negative.setTextColor(0xFF8FA1B4);
+        });
+        dialog.show();
+    }
+
+    private void saveSettings() {
+        String ip = ipEdit.getText().toString().trim();
+        String port = portEdit.getText().toString().trim();
+        if (port.isEmpty()) port = String.valueOf(DEFAULT_PORT);
+        getSharedPreferences("cfg", MODE_PRIVATE).edit()
+                .putString("ip", ip)
+                .putString("port", port)
+                .apply();
+        toast("Impostazioni salvate");
     }
 
     private TextView mkChip(LinearLayout row, String label) {
         TextView t = new TextView(this);
         t.setText(label);
-        t.setTextSize(10);
+        t.setTextSize(9);
+        t.setGravity(Gravity.CENTER);
         t.setTypeface(android.graphics.Typeface.MONOSPACE);
-        t.setPadding(dp(8), dp(3), dp(8), dp(3));
+        t.setPadding(dp(7), 0, dp(7), 0);
         t.setTextColor(0xFF4A5568);
-        row.addView(t);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xFF141C26);
+        background.setCornerRadius(dp(7));
+        t.setBackground(background);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(23));
+        lp.setMargins(0, 0, dp(4), 0);
+        row.addView(t, lp);
         return t;
     }
 
     private void startTicker() {
         ui.removeCallbacks(ticker);
         ui.post(ticker);
+    }
+
+    private void runStartupChecks() {
+        versionHint.setText("Controllo versione GitHub...");
+        checkForUpdate(false, null);
+        probeUsb(0);
+    }
+
+    private void probeUsb(int attempt) {
+        if (isFinishing() || isDestroyed() || running.get()) return;
+        UsbManager um = (UsbManager) getSystemService(USB_SERVICE);
+        UsbDevice dev = findDji(um);
+        if (dev != null) {
+            deviceName = dev.getProductName() != null ? dev.getProductName() : dev.getDeviceName();
+            status.setText("RC pronto · premi AVVIA");
+            return;
+        }
+        status.setText(attempt == 0
+                ? "Cerco il radiocomando..."
+                : "Nessun RC rilevato · collega il cavo USB");
+        if (attempt < 5) ui.postDelayed(() -> probeUsb(attempt + 1), 700);
     }
 
     private void toggle() {
@@ -319,10 +497,11 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void checkForUpdate() {
-        if (!updateBtn.isEnabled()) return;
-        updateBtn.setEnabled(false);
-        status.setText("Controllo aggiornamenti GitHub...");
+    private void checkForUpdate(boolean showDialog, Button trigger) {
+        if (!checkingUpdate.compareAndSet(false, true)) return;
+        final Button finalTrigger = trigger;
+        if (finalTrigger != null) finalTrigger.setEnabled(false);
+        versionHint.setText("Controllo versione GitHub...");
         new Thread(() -> {
             HttpURLConnection connection = null;
             try {
@@ -348,12 +527,15 @@ public class MainActivity extends Activity {
                 final String finalRemoteVersion = remoteVersion;
                 final String finalAssetUrl = assetUrl;
                 ui.post(() -> {
-                    updateBtn.setEnabled(true);
+                    checkingUpdate.set(false);
+                    if (finalTrigger != null) finalTrigger.setEnabled(true);
                     if (comparison <= 0) {
-                        status.setText("App aggiornata: v" + APP_VERSION);
-                        toast("Hai già l'ultima versione (v" + APP_VERSION + ")");
+                        versionHint.setText("v" + APP_VERSION + " · app aggiornata");
+                        if (showDialog) toast("Hai già l'ultima versione (v" + APP_VERSION + ")");
                         return;
                     }
+                    versionHint.setText("v" + finalRemoteVersion + " disponibile · apri Impostazioni");
+                    if (!showDialog) return;
                     new AlertDialog.Builder(this)
                             .setTitle("Aggiornamento disponibile")
                             .setMessage("È disponibile RC-N1C Bridge v" + finalRemoteVersion
@@ -365,9 +547,10 @@ public class MainActivity extends Activity {
                 });
             } catch (Exception error) {
                 ui.post(() -> {
-                    updateBtn.setEnabled(true);
-                    status.setText("Aggiornamento non disponibile");
-                    toast("Controllo aggiornamenti fallito: " + error.getMessage());
+                    checkingUpdate.set(false);
+                    if (finalTrigger != null) finalTrigger.setEnabled(true);
+                    versionHint.setText("Versione non verificata · apri Impostazioni per riprovare");
+                    if (showDialog) toast("Controllo aggiornamenti fallito: " + error.getMessage());
                 });
             } finally {
                 if (connection != null) connection.disconnect();
@@ -380,8 +563,8 @@ public class MainActivity extends Activity {
             toast("URL aggiornamento non attendibile");
             return;
         }
-        updateBtn.setEnabled(false);
-        status.setText("Scarico RC-N1C Bridge v" + version + "...");
+        if (updateBtn != null) updateBtn.setEnabled(false);
+        versionHint.setText("Scarico RC-N1C Bridge v" + version + "...");
         new Thread(() -> {
             HttpURLConnection connection = null;
             try {
@@ -414,8 +597,8 @@ public class MainActivity extends Activity {
                 install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 install.setClipData(ClipData.newRawUri("RCN1C_Bridge", uri));
                 ui.post(() -> {
-                    updateBtn.setEnabled(true);
-                    status.setText("APK pronta: conferma l'installazione di v" + version);
+                    if (updateBtn != null) updateBtn.setEnabled(true);
+                    versionHint.setText("APK pronta · conferma l'installazione di v" + version);
                     try {
                         startActivity(install);
                     } catch (ActivityNotFoundException error) {
@@ -424,8 +607,8 @@ public class MainActivity extends Activity {
                 });
             } catch (Exception error) {
                 ui.post(() -> {
-                    updateBtn.setEnabled(true);
-                    status.setText("Download aggiornamento fallito");
+                    if (updateBtn != null) updateBtn.setEnabled(true);
+                    versionHint.setText("Download aggiornamento fallito");
                     toast("Download fallito: " + error.getMessage());
                 });
             } finally {
@@ -472,14 +655,14 @@ public class MainActivity extends Activity {
             return;
         }
         SharedPreferences.Editor e = getSharedPreferences("cfg", MODE_PRIVATE).edit();
-        if (!ip.isEmpty()) e.putString("ip", ip);
+        e.putString("ip", ip);
         e.putString("port", String.valueOf(port)).apply();
         acquireLocks();
 
         final String fIp = ip;
         final int fPort = port;
         running.set(true);
-        goBtn.setText("FERMA");
+        updateGoButton();
         worker = new Thread(() -> runBridge(fIp, fPort), "rc-bridge");
         worker.start();
     }
@@ -496,7 +679,7 @@ public class MainActivity extends Activity {
         releaseLocks();
         zeroInputs();
         status.setText("Non collegato - " + why);
-        goBtn.setText("AVVIA");
+        updateGoButton();
     }
 
     private void zeroInputs() {
