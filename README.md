@@ -43,9 +43,12 @@ La dashboard è locale e non utilizza servizi o risorse esterne.
 
 ## Demo
 
-[![Anteprima della dashboard RC-N1C Flight Deck](docs/media/flight-deck-demo.gif)](docs/media/flight-deck-demo.mp4)
+<video controls preload="metadata" width="100%">
+  <source src="https://github.com/iTzFrancesco/dji-rcn1c-flight-deck/releases/download/v3.2.0/flight-deck-demo.mp4" type="video/mp4">
+  Il player non è supportato dal browser. [Apri il video MP4](https://github.com/iTzFrancesco/dji-rcn1c-flight-deck/releases/download/v3.2.0/flight-deck-demo.mp4).
+</video>
 
-Clicca sull’anteprima per aprire la registrazione completa.
+[Apri direttamente la demo MP4](https://github.com/iTzFrancesco/dji-rcn1c-flight-deck/releases/download/v3.2.0/flight-deck-demo.mp4)
 
 ## Modalità wireless
 
