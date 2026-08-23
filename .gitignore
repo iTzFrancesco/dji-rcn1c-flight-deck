@@ -15,7 +15,9 @@ wireless/*_report.txt
 
 # Configurazione/segreti locali
 .env
+*.env
 *.local.json
+AGENTS.md
 
 # Il clone storico ha un proprio repository Git e non fa parte del progetto
 DJI_RCN1_bridge/
