@@ -68,6 +68,7 @@ public final class PortableTouchActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        PortableTouchAccessibilityService.disarm();
         ui.removeCallbacks(ticker);
         ui.post(ticker);
     }
@@ -233,6 +234,12 @@ public final class PortableTouchActivity extends Activity {
                     toast("Servizio Accessibilità non ancora collegato");
                 }
             }, 900);
+        } else {
+            ui.postDelayed(() -> {
+                if (!PortableTouchAccessibilityService.armForGame("FPV Freerider")) {
+                    toast("Servizio Accessibilità non collegato");
+                }
+            }, 350);
         }
     }
 
