@@ -10,7 +10,11 @@ import android.util.Log;
 
 import rikka.shizuku.Shizuku;
 
-/** Small app-side wrapper around the Shizuku uinput user-service. */
+/**
+ * App-side virtual gamepad wrapper.
+ * Prefers a real Linux uinput InputDevice and automatically falls back to Shizuku
+ * InputManager injection on ROMs whose SELinux policy denies /dev/uinput.
+ */
 public final class UInputGamepad {
     private static final String TAG = "RCN1C-UInputGamepad";
 
@@ -21,10 +25,12 @@ public final class UInputGamepad {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Listener listener;
     private final Shizuku.UserServiceArgs args;
+    private final ShizukuInputInjector injector = new ShizukuInputInjector();
 
     private volatile IUInputService service;
     private volatile boolean bound;
     private volatile boolean ready;
+    private volatile boolean fallbackInjection;
 
     public UInputGamepad(Context context, Listener listener) {
         this.listener = listener;
@@ -40,34 +46,49 @@ public final class UInputGamepad {
         @Override
         public void onServiceConnected(ComponentName name, IBinder binder) {
             service = IUInputService.Stub.asInterface(binder);
-            post(false, "Servizio gamepad collegato, creo il controller virtuale...");
+            post(false, "Servizio gamepad collegato, verifico uinput...");
             new Thread(() -> {
                 try {
                     IUInputService s = service;
                     if (s == null) return;
-                    if (!s.canCreateDevice()) {
-                        ready = false;
-                        post(false, "/dev/uinput bloccato su questo dispositivo");
+
+                    boolean uinputOk = false;
+                    try {
+                        uinputOk = s.canCreateDevice() && s.createGamepad();
+                    } catch (Throwable t) {
+                        Log.w(TAG, "uinput unavailable", t);
+                    }
+
+                    if (uinputOk) {
+                        fallbackInjection = false;
+                        ready = true;
+                        post(true, "Controller Android virtuale pronto · uinput");
                         return;
                     }
-                    boolean ok = s.createGamepad();
-                    ready = ok;
-                    post(ok, ok
-                            ? "Controller Android virtuale pronto"
-                            : "Creazione controller virtuale fallita");
+
+                    // Some ColorOS / hardened ROM policies deny shell UID access to /dev/uinput.
+                    // Keep a best-effort fallback so the app can still be tested without root.
+                    boolean injectOk = injector.init();
+                    fallbackInjection = injectOk;
+                    ready = injectOk;
+                    post(injectOk, injectOk
+                            ? "Gamepad pronto · fallback Shizuku inject (compatibilità ridotta)"
+                            : "/dev/uinput bloccato e fallback InputManager non disponibile");
                 } catch (Throwable t) {
                     ready = false;
-                    Log.e(TAG, "uinput init failed", t);
-                    post(false, "Errore uinput: " + safeMessage(t));
+                    Log.e(TAG, "gamepad init failed", t);
+                    post(false, "Errore gamepad: " + safeMessage(t));
                 }
-            }, "rcn1c-uinput-init").start();
+            }, "rcn1c-gamepad-init").start();
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
             service = null;
-            ready = false;
-            post(false, "Servizio gamepad disconnesso");
+            if (!fallbackInjection) {
+                ready = false;
+                post(false, "Servizio gamepad disconnesso");
+            }
         }
     };
 
@@ -96,11 +117,18 @@ public final class UInputGamepad {
         } catch (Throwable ignored) {
         }
         service = null;
+        fallbackInjection = false;
         bound = false;
     }
 
     public boolean isReady() {
-        return ready && service != null;
+        if (!ready) return false;
+        return fallbackInjection ? injector.isReady() : service != null;
+    }
+
+    public String getBackendName() {
+        if (!ready) return "--";
+        return fallbackInjection ? "Shizuku inject" : "uinput";
     }
 
     public void sendFrame(int buttons,
@@ -108,8 +136,19 @@ public final class UInputGamepad {
                           int rightStickX, int rightStickY,
                           int leftTrigger, int rightTrigger,
                           int dpadX, int dpadY) {
+        if (!ready) return;
+
+        if (fallbackInjection) {
+            injector.sendFrame(buttons,
+                    leftStickX, leftStickY,
+                    rightStickX, rightStickY,
+                    leftTrigger, rightTrigger,
+                    dpadX, dpadY);
+            return;
+        }
+
         IUInputService s = service;
-        if (!ready || s == null) return;
+        if (s == null) return;
         try {
             s.sendFrame(buttons,
                     leftStickX, leftStickY,
