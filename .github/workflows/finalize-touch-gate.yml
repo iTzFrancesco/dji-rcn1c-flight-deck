@@ -1,0 +1,55 @@
+name: Finalize Portable Touch beta2 gate
+
+on:
+  push:
+    branches:
+      - feature/portable-touch-fix
+    paths:
+      - '.github/workflows/finalize-touch-gate.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/portable-touch-fix
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android toolchain
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1" "ndk;26.3.11579264"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Remove foreground-package dependency
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java')
+          s=p.read_text()
+          old='''                && PortableTouchBridgeService.active\n                && PortableTouchBridgeService.latestFrame != null\n                && isSupportedGame(foregroundPackage);'''
+          new='''                && PortableTouchBridgeService.active\n                && PortableTouchBridgeService.latestFrame != null;'''
+          if old not in s: raise SystemExit('package gate marker not found')
+          p.write_text(s.replace(old,new))
+      - name: Build final beta2 source
+        working-directory: wireless/android-app
+        run: gradle --no-daemon clean assembleRelease
+      - name: Commit final gate fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java
+          git commit -m 'fix(android): arm Portable Touch independently of window events'
+          git push origin HEAD:feature/portable-touch-fix
+      - name: Upload final beta2 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RCN1C-Flight-Bridge-v3.3.0-beta2-final
+          path: wireless/android-app/build/outputs/apk/release/*.apk
