@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-apk:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,19 +21,42 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android build tools
-        shell: pwsh
-        run: sdkmanager "platforms;android-34" "build-tools;37.0.0"
-
-      - name: Build and sign APK
-        shell: pwsh
+      # Use the Android SDK already present on the GitHub runner. Installing only the
+      # packages we actually need avoids downloading emulator/legacy tools.
+      - name: Install required Android toolchain
+        shell: bash
         run: |
-          # setup-android exposes the runner SDK through ANDROID_SDK_ROOT.
-          $env:ANDROID_HOME = $env:ANDROID_SDK_ROOT
-          powershell -ExecutionPolicy Bypass -File wireless\android-app\build_apk.ps1
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1" "ndk;26.3.11579264"
+
+      - name: Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      # IMPORTANT: releases must use the same local debug.keystore that signed v3.1.0.
+      # Store its base64 contents in the repository secret RCN1C_ANDROID_DEBUG_KEYSTORE_B64.
+      # We deliberately fail instead of generating a new key, because Android would reject
+      # that APK as an update of an already-installed RC-N1C Flight Bridge.
+      - name: Restore stable Android signing key
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.RCN1C_ANDROID_DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "Missing RCN1C_ANDROID_DEBUG_KEYSTORE_B64. Refusing to publish with a different signing key."
+            exit 1
+          fi
+          mkdir -p "$HOME/.android"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+
+      - name: Build unified Flight Bridge APK
+        working-directory: wireless/android-app
+        shell: bash
+        run: |
+          gradle --no-daemon clean assembleRelease
+          cp build/outputs/apk/release/*.apk ../RCN1C_Bridge.apk
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2

@@ -1,13 +1,16 @@
 # DJI RC-N1C Flight Deck
 
-Bridge open source non ufficiale per usare il radiocomando **DJI RC-N1C** con simulatori di volo su PC.
+Bridge open source non ufficiale per usare il radiocomando **DJI RC-N1C** con simulatori di volo su PC e Android.
+
+> Il repository/progetto si chiama **Flight Deck**; l'app Android si chiama **RC-N1C Flight Bridge**.
 
 Il progetto offre:
 
-- controller Xbox 360 virtuale tramite ViGEmBus;
+- controller Xbox 360 virtuale tramite ViGEmBus su Windows;
 - lettura degli stick, della rotella e dei pulsanti fisici;
 - dashboard real-time con stato della connessione, modalità e qualità del segnale;
 - collegamento wireless tramite Android o Termux;
+- modalità Android Gamepad per esporre il RC-N1C ai giochi Android;
 - autodetection della porta USB e del PC nella rete locale;
 - build automatica dell'app Android tramite GitHub Actions.
 
@@ -51,17 +54,27 @@ La dashboard è locale e non utilizza servizi o risorse esterne.
 
 Clicca sull’anteprima per aprire la registrazione completa.
 
-## Modalità wireless
+## App Android: RC-N1C Flight Bridge
 
-Il telefono può funzionare da ponte tra radiocomando e PC:
+La stessa APK contiene due modalità indipendenti:
 
 ```text
-RC-N1C → Android → UDP → PC → gamepad virtuale
+PC BRIDGE
+RC-N1C → Android → UDP/Wi-Fi → PC → gamepad virtuale
+
+ANDROID GAMEPAD (beta)
+RC-N1C → Android → virtual gamepad → gioco Android
 ```
 
-Avvia `viz_app\AVVIA_VIZ_WIFI.bat` sul PC e usa l'app Android `wireless\RCN1C_Bridge.apk`. L'indirizzo IP del PC può essere lasciato vuoto: l'app tenta l'autodiscovery nella rete locale. Termux è supportato come alternativa; le istruzioni sono in [docs/uso-wireless.md](docs/uso-wireless.md).
+La modalità **PC Bridge** mantiene il comportamento esistente: avvia `viz_app\AVVIA_VIZ_WIFI.bat` sul PC e nell'app seleziona la modalità PC. L'indirizzo IP può essere lasciato vuoto per usare l'autodiscovery nella rete locale. Termux resta supportato come alternativa; le istruzioni sono in [docs/uso-wireless.md](docs/uso-wireless.md).
 
-Per ricostruire l'APK:
+La modalità **Android Gamepad** usa Shizuku e tenta prima di creare un vero `InputDevice` Xbox-style tramite Linux `uinput`. Se la ROM blocca `/dev/uinput`, prova automaticamente un fallback tramite `IInputManager`/Shizuku, che può essere meno compatibile con alcuni giochi. Il bridge gira come foreground service, quindi continua a ricevere il RC mentre il simulatore è in primo piano.
+
+Target iniziali per i test sono FPV.Skydive e FeelFPV. Il gioco non viene modificato: vede semplicemente il controller virtuale esposto da Flight Bridge.
+
+Dettagli e checklist di test: [docs/android-gamepad.md](docs/android-gamepad.md).
+
+Per ricostruire l'APK sul branch Android Gamepad servono JDK 17, Android SDK/NDK e Gradle 8.7+:
 
 ```powershell
 $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
@@ -81,7 +94,7 @@ powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1
 powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1 -InstallApk
 ```
 
-Il workflow `.github/workflows/release.yml` ricostruisce e pubblica l'APK quando viene creato un tag versione, per esempio `v3.2.0`. Il controllo verifica la versione della release e l'hash SHA-256 dell'APK quando disponibile.
+Il workflow `.github/workflows/release.yml` ricostruisce e pubblica l'APK quando viene creato un tag versione. Il branch `feature/android-virtual-gamepad` ha inoltre una CI dedicata che compila l'APK dopo le modifiche Android.
 
 ## Sviluppo e test
 
