@@ -131,8 +131,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
                 && explicitlyArmed
                 && !releaseRequested
                 && PortableTouchBridgeService.active
-                && PortableTouchBridgeService.latestFrame != null
-                && isSupportedGame(foregroundPackage);
+                && PortableTouchBridgeService.latestFrame != null;
     }
 
     private void drive() {
