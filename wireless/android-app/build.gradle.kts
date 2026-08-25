@@ -5,6 +5,7 @@ plugins {
 android {
     namespace = "com.drone.rcn1cbridge"
     compileSdk = 34
+    ndkVersion = "26.3.11579264"
 
     defaultConfig {
         applicationId = "com.drone.rcn1cbridge"
