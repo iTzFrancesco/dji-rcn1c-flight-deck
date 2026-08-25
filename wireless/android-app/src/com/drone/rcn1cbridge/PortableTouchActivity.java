@@ -110,7 +110,7 @@ public final class PortableTouchActivity extends Activity {
         bridgeStatus = new TextView(this);
         bridgeStatus.setTextColor(0xFF92A4B8);
         bridgeStatus.setTextSize(10);
-        bridgeStatus.setText("Offline · nessun root/Wi-Fi/Shizuku");
+        bridgeStatus.setText("Offline · nessun root o Wi-Fi");
         titles.addView(bridgeStatus);
         header.addView(titles, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -156,19 +156,12 @@ public final class PortableTouchActivity extends Activity {
         stats.setText("RC --   touch --");
         root.addView(stats);
 
-        LinearLayout games = new LinearLayout(this);
-        Button freerider = button("FPV FREERIDER", 0xFF102E44, 0xFF39C5FF);
+        Button freerider = button("APRI FPV FREERIDER", 0xFF102E44, 0xFF39C5FF);
         freerider.setOnClickListener(v -> openFreerider(false));
-        games.addView(freerider, new LinearLayout.LayoutParams(0, dp(44), 1f));
-        Button backup = button("GAMEPAD BACKUP", 0xFF241D38, 0xFF9C7CFF);
-        backup.setOnClickListener(v -> startActivity(new Intent(this, GamepadActivity.class)));
-        LinearLayout.LayoutParams backupLp = new LinearLayout.LayoutParams(0, dp(44), 1f);
-        backupLp.leftMargin = dp(7);
-        games.addView(backup, backupLp);
-        root.addView(games);
+        root.addView(freerider, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)));
 
         TextView note = new TextView(this);
-        note.setText("La prima volta abilita RC-N1C Flight Bridge in Accessibilità. Poi puoi usare questa modalità completamente offline. Shizuku resta solo nel backup Gamepad.");
+        note.setText("La prima volta abilita RC-N1C Flight Bridge in Accessibilità. Poi questa modalità funziona completamente offline.");
         note.setTextColor(0xFF607184);
         note.setTextSize(9);
         note.setGravity(Gravity.CENTER);

@@ -1,0 +1,18 @@
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): true
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v3.2 scheme (APK Signature Scheme v3.2): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+V3.0 Signer: certificate DN: CN=RC-N1C Flight Bridge, O=iTzFrancesco, C=IT
+V3.0 Signer: certificate SHA-256 digest: 7ff5f60b8917bd6c265a38ab6581a027ca4d571e2a5d4bf7d3e7becd04d131a7
+V3.0 Signer: certificate SHA-1 digest: f95a1932433d99faa5d199ba83190ae03a0a1c94
+V3.0 Signer: certificate MD5 digest: a298d00693a3f923abd77ae55a57dfcd
+V3.0 Signer: key algorithm: RSA
+V3.0 Signer: key size (bits): 2048
+V3.0 Signer: public key SHA-256 digest: ecd6cadcad775c9185d1cdfe7758e79bbeb220e602bed4ec728f696495cb7382
+V3.0 Signer: public key SHA-1 digest: 295128d23716322179992fcd3e6e5f504b39d382
+V3.0 Signer: public key MD5 digest: 4b3fad5fa1f97e89bee4822225d52d66

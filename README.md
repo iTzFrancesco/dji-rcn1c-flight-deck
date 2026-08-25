@@ -10,7 +10,7 @@ Il progetto offre:
 - lettura degli stick, della rotella e dei pulsanti fisici;
 - dashboard real-time con stato della connessione, modalità e qualità del segnale;
 - collegamento wireless tramite Android o Termux;
-- modalità Android Gamepad per esporre il RC-N1C ai giochi Android;
+- modalità Portable Touch per usare il RC-N1C nei simulatori Android senza root, Shizuku o Wi-Fi;
 - autodetection della porta USB e del PC nella rete locale;
 - build automatica dell'app Android tramite GitHub Actions.
 
@@ -56,32 +56,21 @@ Clicca sull’anteprima per aprire la registrazione completa.
 
 ## App Android: RC-N1C Flight Bridge
 
-La stessa APK contiene due modalità indipendenti:
+L'APK offre due modalità principali:
 
 ```text
+PORTABLE TOUCH
+RC-N1C → Android → controlli touch del simulatore
+
 PC BRIDGE
 RC-N1C → Android → UDP/Wi-Fi → PC → gamepad virtuale
-
-ANDROID GAMEPAD (beta)
-RC-N1C → Android → virtual gamepad → gioco Android
 ```
 
-La modalità **PC Bridge** mantiene il comportamento esistente: avvia `viz_app\AVVIA_VIZ_WIFI.bat` sul PC e nell'app seleziona la modalità PC. L'indirizzo IP può essere lasciato vuoto per usare l'autodiscovery nella rete locale. Termux resta supportato come alternativa; le istruzioni sono in [docs/uso-wireless.md](docs/uso-wireless.md).
+**Portable Touch** è la modalità consigliata sul telefono: dopo aver abilitato una volta RC-N1C Flight Bridge in Accessibilità, funziona offline senza root, Shizuku, ADB o Wi-Fi. Il primo profilo supportato è FPV Freerider.
 
-La modalità **Android Gamepad** usa Shizuku e tenta prima di creare un vero `InputDevice` Xbox-style tramite Linux `uinput`. Se la ROM blocca `/dev/uinput`, prova automaticamente un fallback tramite `IInputManager`/Shizuku, che può essere meno compatibile con alcuni giochi. Il bridge gira come foreground service, quindi continua a ricevere il RC mentre il simulatore è in primo piano.
+**PC Bridge** mantiene il comportamento esistente e l'autodiscovery nella rete locale. Termux resta supportato come alternativa; vedi [docs/uso-wireless.md](docs/uso-wireless.md).
 
-Target iniziali per i test sono FPV.Skydive e FeelFPV. Il gioco non viene modificato: vede semplicemente il controller virtuale esposto da Flight Bridge.
-
-Dettagli e checklist di test: [docs/android-gamepad.md](docs/android-gamepad.md).
-
-Per ricostruire l'APK sul branch Android Gamepad servono JDK 17, Android SDK/NDK e Gradle 8.7+:
-
-```powershell
-$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
-powershell -ExecutionPolicy Bypass -File wireless\android-app\build_apk.ps1
-```
-
-Non avviare contemporaneamente i due receiver Wi-Fi: entrambi utilizzano la porta UDP 26789.
+Per ricostruire l'APK servono JDK 17, Android SDK 34 e Gradle 8.7+.
 
 ## Aggiornamenti
 
@@ -94,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1
 powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1 -InstallApk
 ```
 
-Il workflow `.github/workflows/release.yml` ricostruisce e pubblica l'APK quando viene creato un tag versione. Il branch `feature/android-virtual-gamepad` ha inoltre una CI dedicata che compila l'APK dopo le modifiche Android.
+Il workflow `.github/workflows/release.yml` ricostruisce, verifica la firma stabile e pubblica `RCN1C_Bridge.apk` per le release stabili.
 
 ## Sviluppo e test
 
