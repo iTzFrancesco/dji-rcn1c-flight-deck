@@ -161,7 +161,7 @@ public final class PortableTouchActivity extends Activity {
         root.addView(freerider, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)));
 
         TextView note = new TextView(this);
-        note.setText("La prima volta abilita RC-N1C Flight Bridge in Accessibilità. Poi questa modalità funziona completamente offline.");
+        note.setText("In FPV Freerider seleziona Input: Touchscreen control. Poi calibra L/R esattamente sul centro dei due joystick.");
         note.setTextColor(0xFF607184);
         note.setTextSize(9);
         note.setGravity(Gravity.CENTER);
@@ -238,7 +238,7 @@ public final class PortableTouchActivity extends Activity {
         if (calibrate) {
             ui.postDelayed(() -> {
                 if (launch != gameLaunchGeneration) return;
-                if (!PortableTouchAccessibilityService.requestCalibration()) {
+                if (!PortableTouchAccessibilityService.requestCalibration(targetGamePackage)) {
                     toast("Servizio Accessibilità non ancora collegato");
                 }
             }, 1000);
