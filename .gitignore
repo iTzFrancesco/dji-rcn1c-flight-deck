@@ -4,6 +4,8 @@ __pycache__/
 
 # Build e artefatti locali
 wireless/android-app/build/
+wireless/android-app/.gradle/
+wireless/android-app/.cxx/
 wireless/android-app/debug.keystore
 *.idsig
 tests/flight_deck_smoke.png
