@@ -83,7 +83,7 @@ Java_com_drone_rcn1cbridge_uinput_UInputNative_createDevice(JNIEnv*, jclass) {
     const int keys[] = {
         BTN_A, BTN_B, BTN_X, BTN_Y,
         BTN_TL, BTN_TR, BTN_SELECT, BTN_START,
-        BTN_THUMBL, BTN_THUMBR, BTN_MODE
+        BTN_MODE, BTN_THUMBL, BTN_THUMBR
     };
     for (int key : keys) {
         if (ioctl(fd, UI_SET_KEYBIT, key) < 0) {
@@ -142,6 +142,7 @@ Java_com_drone_rcn1cbridge_uinput_UInputNative_sendFrame(
         jint dpadX, jint dpadY) {
     if (g_fd < 0) return;
 
+    // Bit order intentionally matches a conventional Xbox descriptor.
     emit_button_edge(buttons, 1 << 0, BTN_A);
     emit_button_edge(buttons, 1 << 1, BTN_B);
     emit_button_edge(buttons, 1 << 2, BTN_X);
@@ -150,9 +151,9 @@ Java_com_drone_rcn1cbridge_uinput_UInputNative_sendFrame(
     emit_button_edge(buttons, 1 << 5, BTN_TR);
     emit_button_edge(buttons, 1 << 6, BTN_SELECT);
     emit_button_edge(buttons, 1 << 7, BTN_START);
-    emit_button_edge(buttons, 1 << 8, BTN_THUMBL);
-    emit_button_edge(buttons, 1 << 9, BTN_THUMBR);
-    emit_button_edge(buttons, 1 << 10, BTN_MODE);
+    emit_button_edge(buttons, 1 << 8, BTN_MODE);
+    emit_button_edge(buttons, 1 << 9, BTN_THUMBL);
+    emit_button_edge(buttons, 1 << 10, BTN_THUMBR);
     g_last_buttons = buttons;
 
     emit_event(EV_ABS, ABS_X, leftX);
