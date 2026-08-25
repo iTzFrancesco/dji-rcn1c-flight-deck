@@ -220,12 +220,17 @@ public final class PortableTouchActivity extends Activity {
             toast("Prima premi COLLEGA RC e aspetta che gli stick si muovano");
             return;
         }
-        Intent game = getPackageManager().getLaunchIntentForPackage("com.Freeride.Freerider_FREE");
-        if (game == null) game = getPackageManager().getLaunchIntentForPackage("com.Freeride.Freerider");
+        String gamePackage = "com.Freeride.Freerider_FREE";
+        Intent game = getPackageManager().getLaunchIntentForPackage(gamePackage);
+        if (game == null) {
+            gamePackage = "com.Freeride.Freerider";
+            game = getPackageManager().getLaunchIntentForPackage(gamePackage);
+        }
         if (game == null) {
             toast("FPV Freerider non installato");
             return;
         }
+        final String targetGamePackage = gamePackage;
         // Cancel old synthetic pointers before Android transitions away from our UI.
         PortableTouchAccessibilityService.disarm();
         final int launch = ++gameLaunchGeneration;
@@ -241,7 +246,7 @@ public final class PortableTouchActivity extends Activity {
             // Give Unity/ColorOS enough time to own the screen before pressing two fingers.
             ui.postDelayed(() -> {
                 if (launch != gameLaunchGeneration) return;
-                if (!PortableTouchAccessibilityService.armForGame("FPV Freerider")) {
+                if (!PortableTouchAccessibilityService.armForGame(targetGamePackage, "FPV Freerider")) {
                     toast("Servizio Accessibilità non collegato");
                 }
             }, 800);

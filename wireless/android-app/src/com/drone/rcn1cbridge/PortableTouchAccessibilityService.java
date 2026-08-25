@@ -32,6 +32,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String foregroundPackage = "";
+    private String armedPackage = "";
     private volatile boolean gestureInFlight = false;
     private final AtomicBoolean driveScheduled = new AtomicBoolean(false);
     private boolean releaseRequested = false;
@@ -68,10 +69,19 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
         return true;
     }
 
-    public static boolean armForGame(String label) {
+    public static boolean armForGame(String packageName, String label) {
         PortableTouchAccessibilityService s = instance;
         if (s == null) return false;
         s.handler.post(() -> {
+            if (!isSupportedGame(packageName)) {
+                s.explicitlyArmed = false;
+                s.armedPackage = "";
+                s.releaseRequested = true;
+                lastState = "Package gioco non supportato";
+                s.scheduleDrive(0);
+                return;
+            }
+            s.armedPackage = packageName;
             s.explicitlyArmed = true;
             s.releaseRequested = false;
             lastState = "ARMED · " + label;
@@ -85,6 +95,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
         if (s == null) return;
         s.handler.post(() -> {
             s.explicitlyArmed = false;
+            s.armedPackage = "";
             s.releaseRequested = true;
             lastState = "Touch disarmato";
             s.scheduleDrive(0);
@@ -103,11 +114,21 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
         foregroundPackage = event.getPackageName().toString();
-        // Never arm from Accessibility events. Unity/ColorOS may deliver stale window
-        // events after Flight Bridge is foreground again, which used to leave two
-        // synthetic fingers pressed over our own UI. Only an explicit game launch arms.
+        // dispatchGesture is global Android input. Never let an armed gesture survive
+        // a foreground-package change: otherwise Recents/Home/SystemUI can receive the
+        // same synthetic fingers that were meant for the simulator.
+        if (explicitlyArmed && (!isSupportedGame(foregroundPackage)
+                || !foregroundPackage.equals(armedPackage))) {
+            explicitlyArmed = false;
+            armedPackage = "";
+            releaseRequested = true;
+            lastState = "Touch sospeso · fuori dal gioco";
+            scheduleDrive(0);
+            return;
+        }
         if (getPackageName().equals(foregroundPackage)) {
             explicitlyArmed = false;
+            armedPackage = "";
             releaseRequested = true;
             lastState = "Touch sospeso · Flight Bridge in primo piano";
             scheduleDrive(0);
@@ -145,6 +166,8 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
         return !calibrating
                 && explicitlyArmed
                 && !releaseRequested
+                && isSupportedGame(foregroundPackage)
+                && foregroundPackage.equals(armedPackage)
                 && PortableTouchBridgeService.active
                 && PortableTouchBridgeService.latestFrame != null;
     }
@@ -246,12 +269,16 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
         float rcX = p.getFloat("right_x", 0.78f) * dm.widthPixels;
         float rcY = p.getFloat("right_y", 0.74f) * dm.heightPixels;
         float radius = p.getFloat("radius", 0.17f) * dm.heightPixels;
+        float density = getResources().getDisplayMetrics().density;
+        float safeX = Math.max(24f * density, dm.widthPixels * 0.03f);
+        float safeTop = Math.max(20f * density, dm.heightPixels * 0.04f);
+        float safeBottom = Math.max(48f * density, dm.heightPixels * 0.08f);
         float lx = axis(f.lx), ly = axis(f.ly), rx = axis(f.rx), ry = axis(f.ry);
         return new float[]{
-                clamp(lcX + lx * radius, 1, dm.widthPixels - 2),
-                clamp(lcY - ly * radius, 1, dm.heightPixels - 2),
-                clamp(rcX + rx * radius, 1, dm.widthPixels - 2),
-                clamp(rcY - ry * radius, 1, dm.heightPixels - 2)
+                clamp(lcX + lx * radius, safeX, dm.widthPixels - safeX),
+                clamp(lcY - ly * radius, safeTop, dm.heightPixels - safeBottom),
+                clamp(rcX + rx * radius, safeX, dm.widthPixels - safeX),
+                clamp(rcY - ry * radius, safeTop, dm.heightPixels - safeBottom)
         };
     }
 
@@ -292,14 +319,16 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
         calibrationOverlay = null;
         calibrating = false;
         releaseRequested = false;
-        if (save) {
+        if (save && isSupportedGame(foregroundPackage)) {
+            armedPackage = foregroundPackage;
             explicitlyArmed = true;
             releaseRequested = false;
             lastState = "ARMED · profilo calibrato";
         } else {
+            armedPackage = "";
             explicitlyArmed = false;
             releaseRequested = true;
-            lastState = "Calibrazione annullata";
+            lastState = save ? "Calibrazione salvata · riapri il gioco" : "Calibrazione annullata";
         }
         scheduleDrive(180);
     }
