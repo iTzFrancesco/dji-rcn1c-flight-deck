@@ -24,6 +24,9 @@ public final class GamepadBridgeService extends Service {
     private static final String CHANNEL_ID = "rcn1c_android_gamepad";
     private static final int NOTIFICATION_ID = 4107;
     private static final int CAMERA_THRESHOLD = 99;
+    // Same output ceiling as the desktop bridge. More frequent Binder/uinput writes do not
+    // improve FPV control, but do waste CPU on older phones such as the Oppo A53s.
+    private static final long GAMEPAD_MIN_FRAME_NS = 8_000_000L;
 
     public static volatile boolean active = false;
     public static volatile boolean gamepadReady = false;
@@ -34,6 +37,7 @@ public final class GamepadBridgeService extends Service {
     private UInputGamepad gamepad;
     private Rcn1cUsbReader reader;
     private UsbDevice device;
+    private volatile long lastGamepadPushNs = 0L;
 
     @Override
     public void onCreate() {
@@ -107,6 +111,10 @@ public final class GamepadBridgeService extends Service {
         UInputGamepad g = gamepad;
         if (g == null || !g.isReady()) return;
 
+        long now = System.nanoTime();
+        if (now - lastGamepadPushNs < GAMEPAD_MIN_FRAME_NS) return;
+        lastGamepadPushNs = now;
+
         int buttons = 0;
         if (f.rawCamera >= Rcn1cUsbReader.RAW_CENTER + CAMERA_THRESHOLD) buttons |= 1 << 0; // A
         else if (f.rawCamera <= Rcn1cUsbReader.RAW_CENTER - CAMERA_THRESHOLD) buttons |= 1 << 1; // B
@@ -131,6 +139,7 @@ public final class GamepadBridgeService extends Service {
         backend = "--";
         status = "Fermato";
         latestFrame = null;
+        lastGamepadPushNs = 0L;
         try {
             if (reader != null) reader.stop();
         } catch (Throwable ignored) {
