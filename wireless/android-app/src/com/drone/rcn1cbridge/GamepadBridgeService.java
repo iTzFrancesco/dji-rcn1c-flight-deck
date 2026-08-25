@@ -184,10 +184,10 @@ public final class GamepadBridgeService extends Service {
                 : new Notification.Builder(this);
         return b.setContentTitle("RC-N1C Flight Bridge")
                 .setContentText(text)
-                .setSmallIcon(android.R.drawable.stat_sys_data_usb)
+                .setSmallIcon(R.drawable.ic_launcher)
                 .setOngoing(true)
                 .setContentIntent(openPi)
-                .addAction(android.R.drawable.ic_media_pause, "Ferma", stopPi)
+                .addAction(R.drawable.ic_launcher, "Ferma", stopPi)
                 .build();
     }
 
