@@ -30,6 +30,9 @@ def test_android_app_is_pc_wifi_bridge_only():
     assert 'if (socket != null && pkt != null)' in main_activity
     assert 'ui.postDelayed(this, 100)' in main_activity
     assert 'LAYER_TYPE_SOFTWARE' not in stick_pad
+    gradle = (ANDROID / 'build.gradle.kts').read_text(encoding='utf-8')
+    assert 'create("stableDebug")' in gradle
+    assert 'signingConfig = signingConfigs.getByName("stableDebug")' in gradle
 
 
 if __name__ == '__main__':

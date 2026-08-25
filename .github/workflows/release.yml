@@ -38,6 +38,10 @@ jobs:
           mkdir -p "$HOME/.android"
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
           chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey \
+            | tr -d ':' | tr '[:upper:]' '[:lower:]' \
+            | grep -q '7ff5f60b8917bd6c265a38ab6581a027ca4d571e2a5d4bf7d3e7becd04d131a7' \
+            || { echo 'Configured keystore certificate does not match the stable APK signer'; exit 1; }
 
       - name: Build and verify Flight Bridge APK
         shell: bash

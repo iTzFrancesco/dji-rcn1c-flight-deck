@@ -10,8 +10,8 @@ android {
         applicationId = "com.drone.rcn1cbridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 23
-        versionName = "3.3.0-beta11"
+        versionCode = 24
+        versionName = "3.3.0-beta12"
     }
 
     sourceSets {
@@ -26,10 +26,20 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        create("stableDebug") {
+            storeFile = file(System.getenv("RCN1C_KEYSTORE_PATH")
+                    ?: "${System.getProperty("user.home")}/.android/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("stableDebug")
         }
     }
 
