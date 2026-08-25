@@ -22,6 +22,15 @@ def test_android_app_is_pc_wifi_bridge_only():
     manifest_text = (ANDROID / 'AndroidManifest.xml').read_text(encoding='utf-8')
     assert 'BIND_ACCESSIBILITY_SERVICE' not in manifest_text
 
+    main_activity = (ANDROID / 'src' / 'com' / 'drone' / 'rcn1cbridge' / 'MainActivity.java').read_text(encoding='utf-8')
+    stick_pad = (ANDROID / 'src' / 'com' / 'drone' / 'rcn1cbridge' / 'StickPadView.java').read_text(encoding='utf-8')
+    assert 'padL.setPoint(lxv, lyv)' in main_activity
+    assert 'padR.setPoint(rxv, ryv)' in main_activity
+    assert 'Monitor locale: RC e dashboard · PC non collegato' in main_activity
+    assert 'if (socket != null && pkt != null)' in main_activity
+    assert 'ui.postDelayed(this, 100)' in main_activity
+    assert 'LAYER_TYPE_SOFTWARE' not in stick_pad
+
 
 if __name__ == '__main__':
     test_android_app_is_pc_wifi_bridge_only()

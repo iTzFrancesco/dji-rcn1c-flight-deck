@@ -128,8 +128,6 @@ public class MainActivity extends Activity {
     private final Runnable ticker = new Runnable() {
         @Override
         public void run() {
-            padL.setPoint(vLx, vLy);
-            padR.setPoint(vRx, vRy);
             chartL.invalidate();
             chartR.invalidate();
             stats.setText(String.format("Inviati %d   scarti %d   %.0f pkt/s   RTT %.1f ms   %s",
@@ -144,7 +142,7 @@ public class MainActivity extends Activity {
             chipFn.setTextColor(vFn ? on : off);
             chipMode.setText(modeLabel(vMode));
             chipMode.setTextColor(0xFFE5B567);
-            ui.postDelayed(this, 33);
+            ui.postDelayed(this, 100);
         }
     };
 
@@ -217,7 +215,7 @@ public class MainActivity extends Activity {
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setMinimumHeight(dp(48));
+        header.setMinimumHeight(dp(42));
 
         LinearLayout titleBlock = new LinearLayout(this);
         titleBlock.setOrientation(LinearLayout.VERTICAL);
@@ -263,7 +261,7 @@ public class MainActivity extends Activity {
         versionHint.setTextColor(0xFF5F7288);
         versionHint.setTextSize(10);
         versionHint.setSingleLine(true);
-        versionHint.setPadding(dp(2), 0, dp(2), dp(4));
+        versionHint.setPadding(dp(2), 0, dp(2), dp(2));
         versionHint.setText("Controllo iniziale in corso...");
         root.addView(versionHint);
 
@@ -272,7 +270,7 @@ public class MainActivity extends Activity {
 
         LinearLayout pads = new LinearLayout(this);
         pads.setGravity(Gravity.CENTER);
-        pads.setPadding(0, dp(2), 0, dp(2));
+        pads.setPadding(0, 0, 0, 0);
         padL = new StickPadView(this, 0xFF39C5FF);
         padL.setLabel("THROTTLE / YAW");
         padR = new StickPadView(this, 0xFFFF9F43);
@@ -283,26 +281,26 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout charts = new LinearLayout(this);
-        charts.setPadding(0, dp(4), 0, dp(2));
+        charts.setPadding(0, dp(2), 0, 0);
         chartL = new StripChartView(this, 0xFF39C5FF, 0xFF2ED573);
         chartR = new StripChartView(this, 0xFFFF9F43, 0xFFFFD166);
         charts.addView(chartL, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         charts.addView(chartR, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         root.addView(charts, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(36)));
 
         stats = new TextView(this);
         stats.setTextColor(0xFF8294A8);
         stats.setTextSize(10);
         stats.setSingleLine(true);
         stats.setTypeface(android.graphics.Typeface.MONOSPACE);
-        stats.setPadding(dp(2), dp(2), dp(2), dp(2));
+        stats.setPadding(dp(2), 0, dp(2), 0);
         stats.setText("Inviati 0   scarti 0   0 pkt/s   RTT 0.0 ms");
         root.addView(stats);
 
         LinearLayout chips = new LinearLayout(this);
         chips.setGravity(Gravity.CENTER_VERTICAL);
-        chips.setPadding(0, dp(2), 0, dp(3));
+        chips.setPadding(0, dp(1), 0, dp(1));
         chipRotL = mkChip(chips, "ROT ◀");
         chipRotR = mkChip(chips, "ROT ▶");
         chipShutter = mkChip(chips, "SCATTO");
@@ -311,7 +309,7 @@ public class MainActivity extends Activity {
         chipFn = mkChip(chips, "FN");
         chipMode = mkChip(chips, "NORMAL");
         root.addView(chips, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(27)));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(23)));
 
         setContentView(root);
     }
@@ -808,18 +806,6 @@ public class MainActivity extends Activity {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY);
         try {
             UsbManager um = (UsbManager) getSystemService(USB_SERVICE);
-            if (ip.isEmpty()) {
-                postStatus("Cerco il PC sulla rete (auto-discovery)...");
-                String found = discoverPc(12000);
-                if (!running.get()) return;
-                if (found == null) {
-                    fail("PC non trovato: avvia la ricevente sul PC (stesso WiFi) o scrivi l'IP a mano");
-                    return;
-                }
-                ip = found;
-                final String fip = ip;
-                ui.post(() -> ipEdit.setText(fip));
-            }
             int seq = 0;
             while (running.get()) {
             UsbDeviceConnection conn = null;
@@ -864,23 +850,50 @@ public class MainActivity extends Activity {
             }
             if (!running.get() || conn == null) break;
 
-            InetAddress dest = InetAddress.getByName(ip);
-            socket = new DatagramSocket();
-            try {
-                socket.setTrafficClass(0xB8);
-            } catch (Exception ignored) {
+            InetAddress dest = null;
+            if (ip.isEmpty()) {
+                postStatus("RC collegato · cerco il PC sulla rete...");
+                String found = discoverPc(2000);
+                if (found != null) {
+                    ip = found;
+                    final String fip = ip;
+                    ui.post(() -> ipEdit.setText(fip));
+                }
             }
+            if (!ip.isEmpty()) {
+                try {
+                    dest = InetAddress.getByName(ip);
+                } catch (Exception ignored) {
+                    postStatus("Monitor locale · indirizzo PC non valido");
+                }
+            }
+
             conn.bulkTransfer(outEp, ENABLE_SIMULATOR, ENABLE_SIMULATOR.length, 100);
             ByteBuffer frame = ByteBuffer.allocate(18).order(ByteOrder.LITTLE_ENDIAN);
-            DatagramPacket pkt = new DatagramPacket(frame.array(), 18, dest, port);
-            destText = ip + ":" + port;
-            postStatus("Collegato: " + deviceName + " -> " + destText);
+            DatagramPacket pkt = null;
+            if (dest != null) {
+                socket = new DatagramSocket();
+                try {
+                    socket.setTrafficClass(0xB8);
+                } catch (Exception ignored) {
+                }
+                pkt = new DatagramPacket(frame.array(), 18, dest, port);
+                destText = ip + ":" + port;
+                postStatus("Collegato: " + deviceName + " -> " + destText);
+            } else {
+                socket = null;
+                destText = "solo monitor";
+                netRttMs = 0f;
+                postStatus("Monitor locale: RC e dashboard · PC non collegato");
+            }
             netRttMs = 0f;
-            pingBuf.clear();
-            pingBuf.put((byte) 'P').put((byte) 'N').put((byte) 'G').put((byte) '1');
-            pingPkt = new DatagramPacket(pingBuf.array(), 16, dest, port);
-            final DatagramSocket psock = socket;
-            new Thread(() -> listenPongs(psock), "ping").start();
+            if (socket != null) {
+                pingBuf.clear();
+                pingBuf.put((byte) 'P').put((byte) 'N').put((byte) 'G').put((byte) '1');
+                pingPkt = new DatagramPacket(pingBuf.array(), 16, dest, port);
+                final DatagramSocket psock = socket;
+                new Thread(() -> listenPongs(psock), "ping").start();
+            }
 
             byte[] inbuf = new byte[512];
             byte[] acc = new byte[2048];
@@ -906,7 +919,7 @@ public class MainActivity extends Activity {
                     emaRtt = emaRtt == 0 ? rtt : emaRtt * 0.9 + rtt * 0.1;
                     rttMs = (float) emaRtt;
 
-                    if (t1 - lastPingNs >= 250_000_000L) {
+                    if (socket != null && t1 - lastPingNs >= 250_000_000L) {
                         lastPingNs = t1;
                         long id = inflightId.incrementAndGet();
                         inflightSentNs = t1;
@@ -946,20 +959,24 @@ public class MainActivity extends Activity {
                         vRy = ryv;
                         vLy = lyv;
                         vLx = lxv;
-                        frame.clear();
-                        frame.putInt(seq++).putShort((short) rxv).putShort((short) ryv)
-                                .putShort((short) lyv).putShort((short) lxv)
-                                .putShort((short) camv).putShort((short) vButtonMask)
-                                .put((byte) vMode).put((byte) 0);
-                        try {
-                            socket.send(pkt);
-                            sentPkts++;
-                            statCount++;
-                            chartL.push(lxv, lyv);
-                            chartR.push(rxv, ryv);
-                        } catch (Exception ex) {
-                            badPkts++;
+                        padL.setPoint(lxv, lyv);
+                        padR.setPoint(rxv, ryv);
+                        chartL.push(lxv, lyv);
+                        chartR.push(rxv, ryv);
+                        if (socket != null && pkt != null) {
+                            frame.clear();
+                            frame.putInt(seq++).putShort((short) rxv).putShort((short) ryv)
+                                    .putShort((short) lyv).putShort((short) lxv)
+                                    .putShort((short) camv).putShort((short) vButtonMask)
+                                    .put((byte) vMode).put((byte) 0);
+                            try {
+                                socket.send(pkt);
+                                sentPkts++;
+                            } catch (Exception ex) {
+                                badPkts++;
+                            }
                         }
+                        statCount++;
                     } else if (plen == BUTTON_PACKET_LEN) {
                         int p = consumed;
                         int mask = ((acc[p + 28] & 0xFF) << 8) | (acc[p + 29] & 0xFF);

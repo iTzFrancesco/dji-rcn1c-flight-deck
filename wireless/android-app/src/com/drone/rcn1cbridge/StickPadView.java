@@ -16,7 +16,7 @@ public class StickPadView extends View {
     private final Paint dotRing = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    private float nx = 0f, ny = 0f;
+    private volatile float nx = 0f, ny = 0f;
     private String label = "";
 
     public StickPadView(Context c, int dotColor) {
@@ -29,12 +29,10 @@ public class StickPadView extends View {
         cross.setStrokeWidth(dp(1.25f));
         cross.setColor(0xFF242C38);
         dot.setColor(dotColor);
-        dot.setShadowLayer(dp(10), 0, 0, dotColor);
         dotRing.setStyle(Paint.Style.STROKE);
         dotRing.setStrokeWidth(dp(2));
         dotRing.setColor(dotColor);
         dotRing.setAlpha(170);
-        setLayerType(LAYER_TYPE_SOFTWARE, null);
         text.setColor(0xFF8B98A8);
         text.setTextSize(dp(11));
         text.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -69,14 +67,14 @@ public class StickPadView extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         float cx = getWidth() / 2f, cy = getHeight() / 2f;
-        float r = Math.min(getWidth(), getHeight()) / 2f - dp(14);
+        float r = Math.min(getWidth(), getHeight()) / 2f - dp(10);
         canvas.drawCircle(cx, cy, r, surface);
         canvas.drawCircle(cx, cy, r, ring);
         canvas.drawLine(cx - r, cy, cx + r, cy, cross);
         canvas.drawLine(cx, cy - r, cx, cy + r, cross);
         float px = cx + nx * r, py = cy - ny * r;
-        canvas.drawCircle(px, py, dp(20), dotRing);
-        canvas.drawCircle(px, py, dp(15), dot);
+        canvas.drawCircle(px, py, dp(22), dotRing);
+        canvas.drawCircle(px, py, dp(17), dot);
         if (!label.isEmpty()) {
             canvas.drawText(label, dp(10), dp(20), text);
         }
