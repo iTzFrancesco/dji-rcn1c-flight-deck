@@ -38,6 +38,8 @@ from rcn1c_protocol import (
 )
 from rcn1c_transport import FRAME_V1, FRAME_V2, FRAME_V3, unpack_frame
 
+from registra_volo import Recorder
+
 HTTP_PORT = 8123
 WS_PORT = 8124
 DEFAULT_UDP_PORT = 26789
@@ -73,6 +75,44 @@ STOP = threading.Event()
 SERIAL = None
 LOGS = deque(maxlen=800)
 LOG_SEQ = 0
+
+RECORDER = None
+REC_LOCK = threading.Lock()
+REC_OPTS_KEYS = ('fps', 'crf', 'window', 'log_only', 'poll')
+
+
+def rec_start(opts):
+    global RECORDER
+    with REC_LOCK:
+        if RECORDER and RECORDER.recording:
+            raise RuntimeError('Registrazione già attiva')
+    clean = {k: opts[k] for k in REC_OPTS_KEYS if k in opts}
+    rec = Recorder(**clean)
+    status = rec.start()
+    with REC_LOCK:
+        RECORDER = rec
+    mode = 'solo log' if status.get('log_only') else f"{status.get('fps')} fps"
+    print(f"[VIZ] registrazione avviata: {status.get('base')} ({mode})")
+    return status
+
+
+def rec_stop():
+    with REC_LOCK:
+        rec = RECORDER
+    if rec is None or rec.t0 is None:
+        raise RuntimeError('Nessuna registrazione attiva')
+    summary = rec.stop()
+    print(f"[VIZ] registrazione fermata: {summary['base']} "
+          f"({summary['elapsed']}s, {summary['rows']} righe)")
+    return summary
+
+
+def rec_status():
+    with REC_LOCK:
+        rec = RECORDER
+    return rec.status() if rec else {
+        'recording': False, 'elapsed': 0, 'rows': 0, 'video_mb': 0, 'base': None,
+    }
 
 
 def log_packet(direction, payload, tag=None):
@@ -368,7 +408,7 @@ async def ws_handler(ws):
                     sent_i = new[-1]['i']
             if len(new) > 60:
                 new = new[-60:]
-            msg = {'t': 's', **snap}
+            msg = {'t': 's', **snap, 'rec': rec_status()}
             if new:
                 msg['lg'] = new
             await ws.send(json.dumps(msg))
@@ -379,18 +419,61 @@ async def ws_handler(ws):
         rtask.cancel()
 
 
+class DashboardHandler(SimpleHTTPRequestHandler):
+    def __init__(self, *a, **kw):
+        super().__init__(*a, directory=str(STATIC_DIR), **kw)
+
+    def log_message(self, fmt, *args):
+        pass
+
+    def _send_json(self, code, obj):
+        body = json.dumps(obj, ensure_ascii=False).encode('utf-8')
+        self.send_response(code)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path == '/api/rec/status':
+            self._send_json(200, rec_status())
+        elif self.path.startswith('/api/'):
+            self._send_json(404, {'ok': False, 'error': 'endpoint sconosciuto'})
+        else:
+            super().do_GET()
+
+    def do_POST(self):
+        if self.path in ('/api/rec/start', '/api/rec/stop'):
+            length = int(self.headers.get('Content-Length') or 0)
+            opts = {}
+            if length:
+                try:
+                    opts = json.loads(self.rfile.read(length).decode('utf-8') or '{}')
+                except (ValueError, UnicodeDecodeError):
+                    opts = {}
+            if not isinstance(opts, dict):
+                opts = {}
+            try:
+                if self.path == '/api/rec/start':
+                    out = rec_start(opts)
+                else:
+                    out = rec_stop()
+                self._send_json(200, {'ok': True, **out})
+            except RuntimeError as e:
+                self._send_json(409, {'ok': False, 'error': str(e)})
+            except (TypeError, ValueError) as e:
+                self._send_json(400, {'ok': False, 'error': f'opzioni non valide: {e}'})
+            except Exception as e:
+                self._send_json(500, {'ok': False, 'error': f'errore inatteso: {e}'})
+        else:
+            self._send_json(404, {'ok': False, 'error': 'endpoint sconosciuto'})
+
+
 async def main_async(args):
     loop = asyncio.get_running_loop()
 
-    class Handler(SimpleHTTPRequestHandler):
-        def __init__(self, *a, **kw):
-            super().__init__(*a, directory=str(STATIC_DIR), **kw)
-
-        def log_message(self, fmt, *args):
-            pass
-
     try:
-        httpd = ThreadingHTTPServer(('127.0.0.1', HTTP_PORT), Handler)
+        httpd = ThreadingHTTPServer(('127.0.0.1', HTTP_PORT), DashboardHandler)
     except OSError as e:
         print(f'[ERRORE] porta HTTP {HTTP_PORT} occupata: {e}')
         print('Chiudi la vecchia scheda/istanza e riprova.')
@@ -449,6 +532,10 @@ def main():
         pass
     finally:
         STOP.set()
+        try:
+            rec_stop()
+        except RuntimeError:
+            pass
         print('\n[VIZ] chiuso.')
 
 

@@ -9,6 +9,8 @@ FILES = [
     'rcn1c_protocol.py',
     'rcn1c_transport.py',
     'dji_rcn1c_bridge.py',
+    'registra_volo.py',
+    'analizza_volo.py',
     'wireless/rcn1c_wifi_rx_pc.py',
     'wireless/rcn1c_phone_tx.py',
     'wireless/button_probe_27.py',
