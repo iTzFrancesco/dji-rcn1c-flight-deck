@@ -10,53 +10,46 @@ permissions:
 
 jobs:
   build-apk:
+    if: ${{ !contains(github.ref_name, '-beta') }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Java 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # Use the Android SDK already present on the GitHub runner. Installing only the
-      # packages we actually need avoids downloading emulator/legacy tools.
-      - name: Install required Android toolchain
+      - name: Install Android toolchain
         shell: bash
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1" "ndk;26.3.11579264"
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Gradle 8.7
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      # IMPORTANT: releases must use the same local debug.keystore that signed v3.1.0.
-      # Store its base64 contents in the repository secret RCN1C_ANDROID_DEBUG_KEYSTORE_B64.
-      # We deliberately fail instead of generating a new key, because Android would reject
-      # that APK as an update of an already-installed RC-N1C Flight Bridge.
       - name: Restore stable Android signing key
         shell: bash
         env:
           KEYSTORE_B64: ${{ secrets.RCN1C_ANDROID_DEBUG_KEYSTORE_B64 }}
         run: |
-          if [ -z "$KEYSTORE_B64" ]; then
-            echo "Missing RCN1C_ANDROID_DEBUG_KEYSTORE_B64. Refusing to publish with a different signing key."
-            exit 1
-          fi
+          test -n "$KEYSTORE_B64" || { echo "Missing RCN1C_ANDROID_DEBUG_KEYSTORE_B64"; exit 1; }
           mkdir -p "$HOME/.android"
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
           chmod 600 "$HOME/.android/debug.keystore"
 
-      - name: Build unified Flight Bridge APK
-        working-directory: wireless/android-app
+      - name: Build and verify Flight Bridge APK
         shell: bash
         run: |
+          cd wireless/android-app
           gradle --no-daemon clean assembleRelease
           cp build/outputs/apk/release/*.apk ../RCN1C_Bridge.apk
+          APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs ../RCN1C_Bridge.apk | tee /tmp/signing.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' /tmp/signing.txt
+          grep -qi '7ff5f60b8917bd6c265a38ab6581a027ca4d571e2a5d4bf7d3e7becd04d131a7' /tmp/signing.txt
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
