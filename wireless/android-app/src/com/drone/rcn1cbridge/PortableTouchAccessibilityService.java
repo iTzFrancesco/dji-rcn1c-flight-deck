@@ -17,12 +17,14 @@ import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 /**
  * Portable backend: converts RC axes to two persistent Android touch pointers.
  * No root, ADB, Wi-Fi or Shizuku is used by this mode.
  */
 public final class PortableTouchAccessibilityService extends AccessibilityService {
-    private static final long STEP_MS = 24;
+    private static final long STEP_MS = 32;
     private static final String PREFS = "touch_profile";
 
     private static volatile PortableTouchAccessibilityService instance;
@@ -30,7 +32,8 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String foregroundPackage = "";
-    private boolean gestureInFlight = false;
+    private volatile boolean gestureInFlight = false;
+    private final AtomicBoolean driveScheduled = new AtomicBoolean(false);
     private boolean releaseRequested = false;
     private boolean calibrating = false;
     private boolean explicitlyArmed = false;
@@ -47,7 +50,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
 
     public static void kick() {
         PortableTouchAccessibilityService s = instance;
-        if (s != null) s.handler.post(s::drive);
+        if (s != null && !s.gestureInFlight) s.scheduleDrive(0);
     }
 
     public static void releaseTouches() {
@@ -72,7 +75,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
             s.explicitlyArmed = true;
             s.releaseRequested = false;
             lastState = "ARMED · " + label;
-            s.drive();
+            s.scheduleDrive(0);
         });
         return true;
     }
@@ -84,7 +87,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
             s.explicitlyArmed = false;
             s.releaseRequested = true;
             lastState = "Touch disarmato";
-            s.drive();
+            s.scheduleDrive(0);
         });
     }
 
@@ -100,15 +103,17 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
         foregroundPackage = event.getPackageName().toString();
-        if (isSupportedGame(foregroundPackage)) {
-            explicitlyArmed = true;
-            releaseRequested = false;
-            lastState = "ARMED · " + foregroundPackage;
-        } else if (getPackageName().equals(foregroundPackage)) {
+        // Never arm from Accessibility events. Unity/ColorOS may deliver stale window
+        // events after Flight Bridge is foreground again, which used to leave two
+        // synthetic fingers pressed over our own UI. Only an explicit game launch arms.
+        if (getPackageName().equals(foregroundPackage)) {
             explicitlyArmed = false;
             releaseRequested = true;
+            lastState = "Touch sospeso · Flight Bridge in primo piano";
+            scheduleDrive(0);
+        } else if (isSupportedGame(foregroundPackage) && !explicitlyArmed) {
+            lastState = "Gioco rilevato · in attesa di avvio";
         }
-        drive();
     }
 
     @Override
@@ -124,6 +129,16 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
         if (instance == this) instance = null;
         lastState = "Accessibilità non attiva";
         return super.onUnbind(intent);
+    }
+
+    private void scheduleDrive(long delayMs) {
+        if (!driveScheduled.compareAndSet(false, true)) return;
+        Runnable r = () -> {
+            driveScheduled.set(false);
+            drive();
+        };
+        if (delayMs <= 0) handler.post(r);
+        else handler.postDelayed(r, delayMs);
     }
 
     private boolean shouldDrive() {
@@ -198,12 +213,12 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
             @Override public void onCompleted(GestureDescription gestureDescription) {
                 gestureInFlight = false;
                 if (finalRelease) resetGestureState();
-                else handler.post(PortableTouchAccessibilityService.this::drive);
+                else scheduleDrive(1);
             }
             @Override public void onCancelled(GestureDescription gestureDescription) {
                 gestureInFlight = false;
                 resetGestureState();
-                handler.postDelayed(PortableTouchAccessibilityService.this::drive, 40);
+                scheduleDrive(80);
             }
         }, handler);
         if (!accepted) {
@@ -286,7 +301,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
             releaseRequested = true;
             lastState = "Calibrazione annullata";
         }
-        handler.postDelayed(this::drive, 120);
+        scheduleDrive(180);
     }
 
     private final class CalibrationOverlay extends View {

@@ -34,6 +34,7 @@ public final class PortableTouchActivity extends Activity {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private TextView accessStatus, bridgeStatus, stats;
     private Button startButton;
+    private int gameLaunchGeneration = 0;
     private StickPadView padL, padR;
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
@@ -68,6 +69,7 @@ public final class PortableTouchActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        gameLaunchGeneration++; // invalidate delayed arm/calibration from an old launch
         PortableTouchAccessibilityService.disarm();
         ui.removeCallbacks(ticker);
         ui.post(ticker);
@@ -112,7 +114,7 @@ public final class PortableTouchActivity extends Activity {
         titles.addView(bridgeStatus);
         header.addView(titles, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        startButton = button("AVVIA", 0xFF123B32, 0xFF2ED573);
+        startButton = button("COLLEGA RC", 0xFF123B32, 0xFF2ED573);
         startButton.setOnClickListener(v -> {
             if (PortableTouchBridgeService.active) stopServiceBridge();
             else beginStart();
@@ -221,25 +223,35 @@ public final class PortableTouchActivity extends Activity {
             toast("Abilita prima il servizio Accessibilità di Flight Bridge");
             return;
         }
+        if (!calibrate && (!PortableTouchBridgeService.active || PortableTouchBridgeService.latestFrame == null)) {
+            toast("Prima premi COLLEGA RC e aspetta che gli stick si muovano");
+            return;
+        }
         Intent game = getPackageManager().getLaunchIntentForPackage("com.Freeride.Freerider_FREE");
         if (game == null) game = getPackageManager().getLaunchIntentForPackage("com.Freeride.Freerider");
         if (game == null) {
             toast("FPV Freerider non installato");
             return;
         }
+        // Cancel old synthetic pointers before Android transitions away from our UI.
+        PortableTouchAccessibilityService.disarm();
+        final int launch = ++gameLaunchGeneration;
         startActivity(game);
         if (calibrate) {
             ui.postDelayed(() -> {
+                if (launch != gameLaunchGeneration) return;
                 if (!PortableTouchAccessibilityService.requestCalibration()) {
                     toast("Servizio Accessibilità non ancora collegato");
                 }
-            }, 900);
+            }, 1000);
         } else {
+            // Give Unity/ColorOS enough time to own the screen before pressing two fingers.
             ui.postDelayed(() -> {
+                if (launch != gameLaunchGeneration) return;
                 if (!PortableTouchAccessibilityService.armForGame("FPV Freerider")) {
                     toast("Servizio Accessibilità non collegato");
                 }
-            }, 350);
+            }, 800);
         }
     }
 
@@ -264,7 +276,7 @@ public final class PortableTouchActivity extends Activity {
                 ? "● Accessibilità pronta · " + PortableTouchAccessibilityService.getLastState()
                 : "○ Accessibilità non attiva · abilitala una sola volta");
         accessStatus.setTextColor(access ? 0xFF2ED573 : 0xFFFFD166);
-        startButton.setText(PortableTouchBridgeService.active ? "FERMA" : "AVVIA");
+        startButton.setText(PortableTouchBridgeService.active ? "SCOLLEGA RC" : "COLLEGA RC");
         if (PortableTouchBridgeService.active) bridgeStatus.setText(PortableTouchBridgeService.status);
 
         Rcn1cUsbReader.Frame f = PortableTouchBridgeService.latestFrame;
