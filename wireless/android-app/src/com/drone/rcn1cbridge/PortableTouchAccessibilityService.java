@@ -33,6 +33,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
     private boolean gestureInFlight = false;
     private boolean releaseRequested = false;
     private boolean calibrating = false;
+    private boolean explicitlyArmed = false;
 
     private GestureDescription.StrokeDescription leftStroke;
     private GestureDescription.StrokeDescription rightStroke;
@@ -64,6 +65,29 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
         return true;
     }
 
+    public static boolean armForGame(String label) {
+        PortableTouchAccessibilityService s = instance;
+        if (s == null) return false;
+        s.handler.post(() -> {
+            s.explicitlyArmed = true;
+            s.releaseRequested = false;
+            lastState = "ARMED · " + label;
+            s.drive();
+        });
+        return true;
+    }
+
+    public static void disarm() {
+        PortableTouchAccessibilityService s = instance;
+        if (s == null) return;
+        s.handler.post(() -> {
+            s.explicitlyArmed = false;
+            s.releaseRequested = true;
+            lastState = "Touch disarmato";
+            s.drive();
+        });
+    }
+
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
@@ -76,7 +100,14 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null || event.getPackageName() == null) return;
         foregroundPackage = event.getPackageName().toString();
-        releaseRequested = !isSupportedGame(foregroundPackage);
+        if (isSupportedGame(foregroundPackage)) {
+            explicitlyArmed = true;
+            releaseRequested = false;
+            lastState = "ARMED · " + foregroundPackage;
+        } else if (getPackageName().equals(foregroundPackage)) {
+            explicitlyArmed = false;
+            releaseRequested = true;
+        }
         drive();
     }
 
@@ -97,6 +128,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
 
     private boolean shouldDrive() {
         return !calibrating
+                && explicitlyArmed
                 && !releaseRequested
                 && PortableTouchBridgeService.active
                 && PortableTouchBridgeService.latestFrame != null
@@ -118,8 +150,8 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
     }
 
     private void startPointers(float[] p) {
-        Path leftPath = new Path(); leftPath.moveTo(p[0], p[1]);
-        Path rightPath = new Path(); rightPath.moveTo(p[2], p[3]);
+        Path leftPath = new Path(); leftPath.moveTo(p[0], p[1]); leftPath.lineTo(p[0] + 0.01f, p[1]);
+        Path rightPath = new Path(); rightPath.moveTo(p[2], p[3]); rightPath.lineTo(p[2] + 0.01f, p[3]);
         leftStroke = new GestureDescription.StrokeDescription(leftPath, 0, STEP_MS, true);
         rightStroke = new GestureDescription.StrokeDescription(rightPath, 0, STEP_MS, true);
         leftX = p[0]; leftY = p[1]; rightX = p[2]; rightY = p[3];
@@ -137,7 +169,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
             leftX = p[0]; leftY = p[1]; rightX = p[2]; rightY = p[3];
             dispatch(leftStroke, rightStroke, !willContinue);
         } catch (Throwable t) {
-            lastState = "Touch chain reset: " + safeMessage(t);
+            lastState = "CANCELLED/RESET · " + safeMessage(t);
             resetGestureState();
         }
     }
@@ -180,7 +212,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
             lastState = "Android ha rifiutato la gesture";
             resetGestureState();
         } else {
-            lastState = finalRelease ? "Touch rilasciato" : "Touch Bridge attivo";
+            lastState = finalRelease ? "Touch rilasciato" : "DISPATCHING · " + foregroundPackage;
         }
     }
 
@@ -246,7 +278,15 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
         calibrationOverlay = null;
         calibrating = false;
         releaseRequested = false;
-        lastState = save ? "Profilo touch salvato" : "Calibrazione annullata";
+        if (save) {
+            explicitlyArmed = true;
+            releaseRequested = false;
+            lastState = "ARMED · profilo calibrato";
+        } else {
+            explicitlyArmed = false;
+            releaseRequested = true;
+            lastState = "Calibrazione annullata";
+        }
         handler.postDelayed(this::drive, 120);
     }
 
@@ -304,7 +344,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
                 if (y<58*density && x>getWidth()*0.76f) { hideCalibrationOverlay(false); return true; }
                 if (y>getHeight()-64*density) {
                     if (x<getWidth()/3f) { radius=Math.max(30*density, radius-10*density); invalidate(); }
-                    else if (x>getWidth()*2f/3f) { radius=Math.min(getHeight()*0.35f, radius+10*density); invalidate(); }
+                    else if (x>getWidth()*2f/3f) { radius=Math.min(getHeight()*0.48f, radius+10*density); invalidate(); }
                     else hideCalibrationOverlay(true);
                     return true;
                 }
@@ -317,8 +357,10 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
         }
 
         private void moveDragged(float x, float y) {
-            float bottom=getHeight()-70*density;
-            x=clamp(x,radius,getWidth()-radius); y=clamp(y,65*density+radius,bottom-radius);
+            float edge=8*density;
+            float top=58*density;
+            float bottom=getHeight()-64*density;
+            x=clamp(x,edge,getWidth()-edge); y=clamp(y,top,bottom);
             if (dragging==1) { lx=x; ly=y; } else if (dragging==2) { rx=x; ry=y; }
             invalidate();
         }

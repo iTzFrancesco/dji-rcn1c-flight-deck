@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.drone.rcn1cbridge"
-    android:versionCode="13"
-    android:versionName="3.3.0-beta1">
+    android:versionCode="14"
+    android:versionName="3.3.0-beta2">
 
     <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
 
@@ -45,6 +45,12 @@
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/device_filter"/>
         </activity>
+
+        <activity
+            android:name=".UpdateActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|keyboardHidden"/>
 
         <activity
             android:name=".PortableTouchActivity"
