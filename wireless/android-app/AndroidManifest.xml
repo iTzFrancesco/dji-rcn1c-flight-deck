@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.drone.rcn1cbridge"
-    android:versionCode="12"
-    android:versionName="3.2.0">
+    android:versionCode="13"
+    android:versionName="3.3.0-beta1">
 
     <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
 
@@ -18,6 +18,8 @@
         <package android:name="moe.shizuku.privileged.api"/>
         <package android:name="com.Orqa.FPVSkyDive"/>
         <package android:name="com.FullFocusStudio.FeelFPV"/>
+        <package android:name="com.Freeride.Freerider_FREE"/>
+        <package android:name="com.Freeride.Freerider"/>
     </queries>
 
     <application
@@ -45,6 +47,12 @@
         </activity>
 
         <activity
+            android:name=".PortableTouchActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|keyboardHidden"/>
+
+        <activity
             android:name=".MainActivity"
             android:exported="false"
             android:launchMode="singleTask"
@@ -56,6 +64,24 @@
             android:exported="false"
             android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|keyboardHidden"/>
+
+        <service
+            android:name=".PortableTouchBridgeService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice"/>
+
+        <service
+            android:name=".PortableTouchAccessibilityService"
+            android:label="RC-N1C Portable Touch Bridge"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/touch_accessibility_service"/>
+        </service>
 
         <service
             android:name=".GamepadBridgeService"
