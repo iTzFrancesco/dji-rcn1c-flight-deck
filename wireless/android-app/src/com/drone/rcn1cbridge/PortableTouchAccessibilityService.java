@@ -27,7 +27,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * No root, ADB, Wi-Fi or Shizuku is used by this mode.
  */
 public final class PortableTouchAccessibilityService extends AccessibilityService {
-    private static final long STEP_MS = 32;
+    private static final long STEP_MS = 16;
+    private static final float DEADZONE = 0.045f;
+    private static final float MOVE_EPSILON_PX = 1.0f;
     private static final String PREFS = "touch_profile";
 
     private static volatile PortableTouchAccessibilityService instance;
@@ -37,6 +39,7 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
     private String foregroundPackage = "";
     private String armedPackage = "";
     private volatile boolean gestureInFlight = false;
+    private volatile boolean inputDirty = false;
     private final AtomicBoolean driveScheduled = new AtomicBoolean(false);
     private boolean releaseRequested = false;
     private boolean calibrating = false;
@@ -54,7 +57,9 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
 
     public static void kick() {
         PortableTouchAccessibilityService s = instance;
-        if (s != null && !s.gestureInFlight) s.scheduleDrive(0);
+        if (s == null) return;
+        s.inputDirty = true;
+        if (!s.gestureInFlight) s.scheduleDrive(0);
     }
 
     public static void releaseTouches() {
@@ -201,12 +206,33 @@ private boolean shouldDrive() {
         }
         Rcn1cUsbReader.Frame f = PortableTouchBridgeService.latestFrame;
         if (f == null) return;
+        inputDirty = false;
+        if (isNeutral(f)) {
+            if (leftStroke != null || rightStroke != null) {
+                releaseRequested = true;
+                dispatchRelease();
+            } else {
+                lastState = "READY · stick neutri";
+            }
+            return;
+        }
         float[] target = targetPoints(f);
         releaseRequested = false;
-        if (leftStroke == null || rightStroke == null) startPointers(target);
-        else continuePointers(target, true);
+        if (leftStroke == null || rightStroke == null) {
+            startPointers(target);
+        } else if (targetMoved(target)) {
+            continuePointers(target, true);
+        } else {
+            lastState = "HOLD · input stabile";
+        }
     }
 
+    private boolean targetMoved(float[] p) {
+        float dlx = p[0] - leftX, dly = p[1] - leftY;
+        float drx = p[2] - rightX, dry = p[3] - rightY;
+        float eps2 = MOVE_EPSILON_PX * MOVE_EPSILON_PX;
+        return dlx * dlx + dly * dly >= eps2 || drx * drx + dry * dry >= eps2;
+    }
     private void startPointers(float[] p) {
         Path leftPath = new Path(); leftPath.moveTo(p[0], p[1]); leftPath.lineTo(p[0] + 0.01f, p[1]);
         Path rightPath = new Path(); rightPath.moveTo(p[2], p[3]); rightPath.lineTo(p[2] + 0.01f, p[3]);
@@ -256,8 +282,11 @@ private boolean shouldDrive() {
         boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
             @Override public void onCompleted(GestureDescription gestureDescription) {
                 gestureInFlight = false;
-                if (finalRelease) resetGestureState();
-                else scheduleDrive(1);
+                if (finalRelease) {
+                    resetGestureState();
+                } else if (releaseRequested || inputDirty) {
+                    scheduleDrive(0);
+                }
             }
             @Override public void onCancelled(GestureDescription gestureDescription) {
                 gestureInFlight = false;
@@ -303,7 +332,18 @@ private boolean shouldDrive() {
         };
     }
 
-    private static float axis(int value) { return Math.max(-1f, Math.min(1f, value / 32767f)); }
+    private static float axis(int value) {
+        float v = Math.max(-1f, Math.min(1f, value / 32767f));
+        float a = Math.abs(v);
+        if (a <= DEADZONE) return 0f;
+        float scaled = (a - DEADZONE) / (1f - DEADZONE);
+        return Math.copySign(Math.min(1f, scaled), v);
+    }
+
+    private static boolean isNeutral(Rcn1cUsbReader.Frame f) {
+        return axis(f.lx) == 0f && axis(f.ly) == 0f
+                && axis(f.rx) == 0f && axis(f.ry) == 0f;
+    }
     private static float clamp(float value, float min, float max) { return Math.max(min, Math.min(max, value)); }
 
     private static boolean isSupportedGame(String pkg) {
