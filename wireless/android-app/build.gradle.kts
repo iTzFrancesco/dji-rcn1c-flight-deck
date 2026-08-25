@@ -12,7 +12,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 12
-        versionName = "3.3.0-beta1"
+        versionName = "3.2.0"
 
         ndk {
             // Keep the APK small: real Android phones/tablets only.
@@ -50,8 +50,7 @@ android {
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
-            // The project historically shipped an APK signed with a generated debug key.
-            // Keep branch builds installable without introducing signing secrets yet.
+            // Release-compatible builds restore the stable key into ~/.android/debug.keystore.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
