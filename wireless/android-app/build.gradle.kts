@@ -11,8 +11,8 @@ android {
         applicationId = "com.drone.rcn1cbridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 12
-        versionName = "3.2.0"
+        versionCode = 13
+        versionName = "3.3.0-beta1"
 
         ndk {
             // Keep the APK small: real Android phones/tablets only.
@@ -50,7 +50,6 @@ android {
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
-            // Release-compatible builds restore the stable key into ~/.android/debug.keystore.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -62,6 +61,7 @@ android {
 }
 
 dependencies {
+    // Kept only for the optional Android Gamepad backup mode.
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
 }
