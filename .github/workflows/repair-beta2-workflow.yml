@@ -1,0 +1,37 @@
+name: Repair beta2 workflow
+
+on:
+  push:
+    branches:
+      - feature/portable-touch-fix
+    paths:
+      - '.github/workflows/repair-beta2-workflow.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/portable-touch-fix
+      - name: Fix Java escaping in generator
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('.github/workflows/apply-portable-touch-beta2.yml')
+          s=p.read_text()
+          s=s.replace('String[] a = la[0].split("\\\\\\\\.");', 'String[] a = la[0].split("[.]");')
+          s=s.replace('String[] b = ra[0].split("\\\\\\\\.");', 'String[] b = ra[0].split("[.]");')
+          s=s.replace('Pattern.compile("(\\\\\\\\d+)").matcher(la[1])', 'Pattern.compile("([0-9]+)").matcher(la[1])')
+          s=s.replace('Pattern.compile("(\\\\\\\\d+)").matcher(ra[1])', 'Pattern.compile("([0-9]+)").matcher(ra[1])')
+          p.write_text(s)
+      - name: Commit repair
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/apply-portable-touch-beta2.yml
+          git commit -m 'ci: fix beta2 comparator generator escaping'
+          git push origin HEAD:feature/portable-touch-fix
