@@ -11,8 +11,8 @@ android {
         applicationId = "com.drone.rcn1cbridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "3.3.0-beta2"
+        versionCode = 15
+        versionName = "3.3.0-beta3"
 
         ndk {
             // Keep the APK small: real Android phones/tablets only.
