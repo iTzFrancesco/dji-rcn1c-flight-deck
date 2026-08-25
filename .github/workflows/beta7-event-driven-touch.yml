@@ -29,117 +29,79 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-
           p = Path('wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java')
           s = p.read_text(encoding='utf-8')
-
-          s = s.replace('private static final long STEP_MS = 32;', '''private static final long STEP_MS = 16;
-    private static final float DEADZONE = 0.045f;
-    private static final float MOVE_EPSILON_PX = 1.0f;''')
-          s = s.replace('private volatile boolean gestureInFlight = false;', '''private volatile boolean gestureInFlight = false;
-    private volatile boolean inputDirty = false;''')
-
-          s, n = re.subn(
-              r'public static void kick\(\) \{.*?\n    \}',
-              '''public static void kick() {
-        PortableTouchAccessibilityService s = instance;
-        if (s == null) return;
-        s.inputDirty = true;
-        if (!s.gestureInFlight) s.scheduleDrive(0);
-    }''',
-              s,
-              count=1,
-              flags=re.S,
-          )
-          if n != 1: raise SystemExit('kick patch failed')
-
-          s, n = re.subn(
-              r'    private void drive\(\) \{.*?\n    \}\n\n    private void startPointers',
-              '''    private void drive() {
-        if (gestureInFlight) return;
-        if (!shouldDrive()) {
-            if (leftStroke != null || rightStroke != null) dispatchRelease();
-            return;
-        }
-
-        Rcn1cUsbReader.Frame f = PortableTouchBridgeService.latestFrame;
-        if (f == null) return;
-        inputDirty = false;
-
-        // When the physical sticks are at rest, do not keep synthetic fingers pressed.
-        // This removes idle joystick drift and lets the touchscreen behave normally.
-        if (isNeutral(f)) {
-            if (leftStroke != null || rightStroke != null) {
-                releaseRequested = true;
-                dispatchRelease();
-            } else {
-                lastState = "READY · stick neutri";
-            }
-            return;
-        }
-
-        float[] target = targetPoints(f);
-        releaseRequested = false;
-        if (leftStroke == null || rightStroke == null) {
-            startPointers(target);
-        } else if (targetMoved(target)) {
-            continuePointers(target, true);
-        } else {
-            // A continued stroke keeps its pointer down after the gesture completes.
-            // Do not dispatch another identical gesture just as a keepalive.
-            lastState = "HOLD · input stabile";
-        }
-    }
-
-    private boolean targetMoved(float[] p) {
-        float dlx = p[0] - leftX, dly = p[1] - leftY;
-        float drx = p[2] - rightX, dry = p[3] - rightY;
-        float eps2 = MOVE_EPSILON_PX * MOVE_EPSILON_PX;
-        return dlx * dlx + dly * dly >= eps2 || drx * drx + dry * dry >= eps2;
-    }
-
-    private void startPointers''',
-              s,
-              count=1,
-              flags=re.S,
-          )
-          if n != 1: raise SystemExit('drive patch failed')
-
-          old = '''                if (finalRelease) resetGestureState();
-                else scheduleDrive(1);'''
-          new = '''                if (finalRelease) {
-                    resetGestureState();
-                } else if (inputDirty) {
-                    scheduleDrive(0);
-                }'''
-          if old not in s: raise SystemExit('onCompleted patch target missing')
-          s = s.replace(old, new, 1)
-
-          s, n = re.subn(
-              r'    private static float axis\(int value\) \{[^\n]*\}',
-              '''    private static float axis(int value) {
-        float v = Math.max(-1f, Math.min(1f, value / 32767f));
-        float a = Math.abs(v);
-        if (a <= DEADZONE) return 0f;
-        float scaled = (a - DEADZONE) / (1f - DEADZONE);
-        return Math.copySign(Math.min(1f, scaled), v);
-    }
-
-    private static boolean isNeutral(Rcn1cUsbReader.Frame f) {
-        return axis(f.lx) == 0f && axis(f.ly) == 0f
-                && axis(f.rx) == 0f && axis(f.ry) == 0f;
-    }''',
-              s,
-              count=1,
-          )
-          if n != 1: raise SystemExit('axis patch failed')
-
+          s = s.replace('private static final long STEP_MS = 32;', 'private static final long STEP_MS = 16;\n    private static final float DEADZONE = 0.045f;\n    private static final float MOVE_EPSILON_PX = 1.0f;')
+          s = s.replace('private volatile boolean gestureInFlight = false;', 'private volatile boolean gestureInFlight = false;\n    private volatile boolean inputDirty = false;')
+          old_kick = 'public static void kick() {\n        PortableTouchAccessibilityService s = instance;\n        if (s != null && !s.gestureInFlight) s.scheduleDrive(0);\n    }'
+          new_kick = 'public static void kick() {\n        PortableTouchAccessibilityService s = instance;\n        if (s == null) return;\n        s.inputDirty = true;\n        if (!s.gestureInFlight) s.scheduleDrive(0);\n    }'
+          if old_kick not in s: raise SystemExit('kick target missing')
+          s = s.replace(old_kick, new_kick, 1)
+          start = s.index('    private void drive() {')
+          end = s.index('    private void startPointers', start)
+          drive_lines = [
+              '    private void drive() {',
+              '        if (gestureInFlight) return;',
+              '        if (!shouldDrive()) {',
+              '            if (leftStroke != null || rightStroke != null) dispatchRelease();',
+              '            return;',
+              '        }',
+              '        Rcn1cUsbReader.Frame f = PortableTouchBridgeService.latestFrame;',
+              '        if (f == null) return;',
+              '        inputDirty = false;',
+              '        if (isNeutral(f)) {',
+              '            if (leftStroke != null || rightStroke != null) {',
+              '                releaseRequested = true;',
+              '                dispatchRelease();',
+              '            } else {',
+              '                lastState = "READY · stick neutri";',
+              '            }',
+              '            return;',
+              '        }',
+              '        float[] target = targetPoints(f);',
+              '        releaseRequested = false;',
+              '        if (leftStroke == null || rightStroke == null) {',
+              '            startPointers(target);',
+              '        } else if (targetMoved(target)) {',
+              '            continuePointers(target, true);',
+              '        } else {',
+              '            lastState = "HOLD · input stabile";',
+              '        }',
+              '    }',
+              '',
+              '    private boolean targetMoved(float[] p) {',
+              '        float dlx = p[0] - leftX, dly = p[1] - leftY;',
+              '        float drx = p[2] - rightX, dry = p[3] - rightY;',
+              '        float eps2 = MOVE_EPSILON_PX * MOVE_EPSILON_PX;',
+              '        return dlx * dlx + dly * dly >= eps2 || drx * drx + dry * dry >= eps2;',
+              '    }',
+              '',
+          ]
+          s = s[:start] + '\n'.join(drive_lines) + s[end:]
+          old_done = '                if (finalRelease) resetGestureState();\n                else scheduleDrive(1);'
+          new_done = '                if (finalRelease) {\n                    resetGestureState();\n                } else if (releaseRequested || inputDirty) {\n                    scheduleDrive(0);\n                }'
+          if old_done not in s: raise SystemExit('completion target missing')
+          s = s.replace(old_done, new_done, 1)
+          old_axis = '    private static float axis(int value) { return Math.max(-1f, Math.min(1f, value / 32767f)); }'
+          new_axis = '\n'.join([
+              '    private static float axis(int value) {',
+              '        float v = Math.max(-1f, Math.min(1f, value / 32767f));',
+              '        float a = Math.abs(v);',
+              '        if (a <= DEADZONE) return 0f;',
+              '        float scaled = (a - DEADZONE) / (1f - DEADZONE);',
+              '        return Math.copySign(Math.min(1f, scaled), v);',
+              '    }',
+              '',
+              '    private static boolean isNeutral(Rcn1cUsbReader.Frame f) {',
+              '        return axis(f.lx) == 0f && axis(f.ly) == 0f',
+              '                && axis(f.rx) == 0f && axis(f.ry) == 0f;',
+              '    }',
+          ])
+          if old_axis not in s: raise SystemExit('axis target missing')
+          s = s.replace(old_axis, new_axis, 1)
           p.write_text(s, encoding='utf-8')
-
           gp = Path('wireless/android-app/build.gradle.kts')
-          g = gp.read_text(encoding='utf-8')
-          g = g.replace('versionCode = 18', 'versionCode = 19')
-          g = g.replace('versionName = "3.3.0-beta6"', 'versionName = "3.3.0-beta7"')
+          g = gp.read_text(encoding='utf-8').replace('versionCode = 18', 'versionCode = 19').replace('versionName = "3.3.0-beta6"', 'versionName = "3.3.0-beta7"')
           gp.write_text(g, encoding='utf-8')
           PY
 
