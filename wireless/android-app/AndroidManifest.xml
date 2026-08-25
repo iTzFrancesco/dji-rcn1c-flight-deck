@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.drone.rcn1cbridge"
     android:versionCode="12"
-    android:versionName="3.3.0-beta1">
+    android:versionName="3.2.0">
 
     <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
 
@@ -44,7 +44,6 @@
                 android:resource="@xml/device_filter"/>
         </activity>
 
-        <!-- Existing Wi-Fi -> PC dashboard/bridge. Kept intact. -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
@@ -52,7 +51,6 @@
             android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|keyboardHidden"/>
 
-        <!-- New local RC -> Android virtual gamepad dashboard. -->
         <activity
             android:name=".GamepadActivity"
             android:exported="false"
@@ -64,7 +62,6 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice"/>
 
-        <!-- Shizuku bootstrap provider. The uinput service itself is spawned as a user-service. -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="com.drone.rcn1cbridge.shizuku"
