@@ -81,7 +81,7 @@ public class MainActivity extends Activity {
     private static final int DISCOVERY_PORT = 26790;
     private static final int VENDOR_DJI = 0x2CA3;
     private static final String ACTION_USB_PERMISSION = "com.drone.rcn1cbridge.USB_PERMISSION";
-    private static final String APP_VERSION = "3.2.0";
+    private static final String APP_VERSION = BuildConfig.VERSION_NAME;
     private static final String UPDATE_API =
             "https://api.github.com/repos/iTzFrancesco/dji-rcn1c-flight-deck/releases/latest";
     private static final String RELEASE_ASSET_PREFIX =
@@ -632,15 +632,25 @@ public class MainActivity extends Activity {
     }
 
     private static int compareVersions(String left, String right) {
-        String[] a = left.split("\\.");
-        String[] b = right.split("\\.");
+        String[] la = left.split("-", 2);
+        String[] ra = right.split("-", 2);
+        String[] a = la[0].split("[.]");
+        String[] b = ra[0].split("[.]");
         int count = Math.max(a.length, b.length);
         for (int i = 0; i < count; i++) {
-            int av = i < a.length ? Integer.parseInt(a[i].replaceAll("[^0-9].*", "")) : 0;
-            int bv = i < b.length ? Integer.parseInt(b[i].replaceAll("[^0-9].*", "")) : 0;
+            int av = i < a.length ? Integer.parseInt(a[i].replaceAll("[^0-9]", "")) : 0;
+            int bv = i < b.length ? Integer.parseInt(b[i].replaceAll("[^0-9]", "")) : 0;
             if (av != bv) return av < bv ? -1 : 1;
         }
-        return 0;
+        if (la.length == 1 && ra.length > 1) return 1;
+        if (la.length > 1 && ra.length == 1) return -1;
+        if (la.length == 1) return 0;
+        java.util.regex.Matcher lm = Pattern.compile("([0-9]+)").matcher(la[1]);
+        java.util.regex.Matcher rm = Pattern.compile("([0-9]+)").matcher(ra[1]);
+        int ln = lm.find() ? Integer.parseInt(lm.group(1)) : 0;
+        int rn = rm.find() ? Integer.parseInt(rm.group(1)) : 0;
+        if (ln != rn) return ln < rn ? -1 : 1;
+        return la[1].compareToIgnoreCase(ra[1]);
     }
 
     private void startBridge() {

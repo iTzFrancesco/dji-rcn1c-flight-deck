@@ -1,13 +1,16 @@
 # DJI RC-N1C Flight Deck
 
-Bridge open source non ufficiale per usare il radiocomando **DJI RC-N1C** con simulatori di volo su PC.
+Bridge open source non ufficiale per usare il radiocomando **DJI RC-N1C** con simulatori di volo su PC e Android.
+
+> Il repository/progetto si chiama **Flight Deck**; l'app Android si chiama **RC-N1C Flight Bridge**.
 
 Il progetto offre:
 
-- controller Xbox 360 virtuale tramite ViGEmBus;
+- controller Xbox 360 virtuale tramite ViGEmBus su Windows;
 - lettura degli stick, della rotella e dei pulsanti fisici;
 - dashboard real-time con stato della connessione, modalità e qualità del segnale;
 - collegamento wireless tramite Android o Termux;
+- modalità Portable Touch per usare il RC-N1C nei simulatori Android senza root, Shizuku o Wi-Fi;
 - autodetection della porta USB e del PC nella rete locale;
 - build automatica dell'app Android tramite GitHub Actions.
 
@@ -51,24 +54,23 @@ La dashboard è locale e non utilizza servizi o risorse esterne.
 
 Clicca sull’anteprima per aprire la registrazione completa.
 
-## Modalità wireless
+## App Android: RC-N1C Flight Bridge
 
-Il telefono può funzionare da ponte tra radiocomando e PC:
+L'APK offre due modalità principali:
 
 ```text
-RC-N1C → Android → UDP → PC → gamepad virtuale
+PORTABLE TOUCH
+RC-N1C → Android → controlli touch del simulatore
+
+PC BRIDGE
+RC-N1C → Android → UDP/Wi-Fi → PC → gamepad virtuale
 ```
 
-Avvia `viz_app\AVVIA_VIZ_WIFI.bat` sul PC e usa l'app Android `wireless\RCN1C_Bridge.apk`. L'indirizzo IP del PC può essere lasciato vuoto: l'app tenta l'autodiscovery nella rete locale. Termux è supportato come alternativa; le istruzioni sono in [docs/uso-wireless.md](docs/uso-wireless.md).
+**Portable Touch** è la modalità consigliata sul telefono: dopo aver abilitato una volta RC-N1C Flight Bridge in Accessibilità, funziona offline senza root, Shizuku, ADB o Wi-Fi. Il primo profilo supportato è FPV Freerider.
 
-Per ricostruire l'APK:
+**PC Bridge** mantiene il comportamento esistente e l'autodiscovery nella rete locale. Termux resta supportato come alternativa; vedi [docs/uso-wireless.md](docs/uso-wireless.md).
 
-```powershell
-$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
-powershell -ExecutionPolicy Bypass -File wireless\android-app\build_apk.ps1
-```
-
-Non avviare contemporaneamente i due receiver Wi-Fi: entrambi utilizzano la porta UDP 26789.
+Per ricostruire l'APK servono JDK 17, Android SDK 34 e Gradle 8.7+.
 
 ## Aggiornamenti
 
@@ -81,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1
 powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1 -InstallApk
 ```
 
-Il workflow `.github/workflows/release.yml` ricostruisce e pubblica l'APK quando viene creato un tag versione, per esempio `v3.2.0`. Il controllo verifica la versione della release e l'hash SHA-256 dell'APK quando disponibile.
+Il workflow `.github/workflows/release.yml` ricostruisce, verifica la firma stabile e pubblica `RCN1C_Bridge.apk` per le release stabili.
 
 ## Sviluppo e test
 

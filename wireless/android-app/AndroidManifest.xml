@@ -1,22 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.drone.rcn1cbridge"
-    android:versionCode="11"
-    android:versionName="3.2.0">
+    android:versionCode="16"
+    android:versionName="3.3.0-beta4">
 
     <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
+
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <queries>
+        <package android:name="com.Orqa.FPVSkyDive"/>
+        <package android:name="com.FullFocusStudio.FeelFPV"/>
+        <package android:name="com.Freeride.Freerider_FREE"/>
+        <package android:name="com.Freeride.Freerider"/>
+    </queries>
 
     <application
         android:label="RC-N1C Flight Bridge"
         android:icon="@drawable/ic_launcher"
         android:roundIcon="@drawable/ic_launcher"
         android:theme="@android:style/Theme.Material.NoActionBar">
+
         <activity
-            android:name=".MainActivity"
+            android:name=".LauncherActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
@@ -32,6 +44,24 @@
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/device_filter"/>
         </activity>
+
+        <activity android:name=".UpdateActivity" android:exported="false" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+        <activity android:name=".PortableTouchActivity" android:exported="false" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+        <activity android:name=".MainActivity" android:exported="false" android:launchMode="singleTask" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+
+        <service android:name=".PortableTouchBridgeService" android:exported="false" android:foregroundServiceType="connectedDevice"/>
+
+        <service
+            android:name=".PortableTouchAccessibilityService"
+            android:label="RC-N1C Portable Touch Bridge"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/touch_accessibility_service"/>
+        </service>
+
         <provider
             android:name=".ApkFileProvider"
             android:authorities="com.drone.rcn1cbridge.apkprovider"

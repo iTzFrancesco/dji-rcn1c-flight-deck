@@ -10,30 +10,46 @@ permissions:
 
 jobs:
   build-apk:
-    runs-on: windows-latest
+    if: ${{ !contains(github.ref_name, '-beta') }}
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Java 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android build tools
-        shell: pwsh
-        run: sdkmanager "platforms;android-34" "build-tools;37.0.0"
-
-      - name: Build and sign APK
-        shell: pwsh
+      - name: Install Android toolchain
+        shell: bash
         run: |
-          # setup-android exposes the runner SDK through ANDROID_SDK_ROOT.
-          $env:ANDROID_HOME = $env:ANDROID_SDK_ROOT
-          powershell -ExecutionPolicy Bypass -File wireless\android-app\build_apk.ps1
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Restore stable Android signing key
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.RCN1C_ANDROID_DEBUG_KEYSTORE_B64 }}
+        run: |
+          test -n "$KEYSTORE_B64" || { echo "Missing RCN1C_ANDROID_DEBUG_KEYSTORE_B64"; exit 1; }
+          mkdir -p "$HOME/.android"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+
+      - name: Build and verify Flight Bridge APK
+        shell: bash
+        run: |
+          cd wireless/android-app
+          gradle --no-daemon clean assembleRelease
+          cp build/outputs/apk/release/*.apk ../RCN1C_Bridge.apk
+          APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs ../RCN1C_Bridge.apk | tee /tmp/signing.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' /tmp/signing.txt
+          grep -qi '7ff5f60b8917bd6c265a38ab6581a027ca4d571e2a5d4bf7d3e7becd04d131a7' /tmp/signing.txt
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
