@@ -10,7 +10,7 @@ Il progetto offre:
 - lettura degli stick, della rotella e dei pulsanti fisici;
 - dashboard real-time con stato della connessione, modalità e qualità del segnale;
 - collegamento wireless tramite Android o Termux;
-- modalità Portable Touch per usare il RC-N1C nei simulatori Android senza root, Shizuku o Wi-Fi;
+- app Android per inviare il radiocomando al PC via Wi-Fi e visualizzare la dashboard;
 - autodetection della porta USB e del PC nella rete locale;
 - build automatica dell'app Android tramite GitHub Actions.
 
@@ -56,19 +56,14 @@ Clicca sull’anteprima per aprire la registrazione completa.
 
 ## App Android: RC-N1C Flight Bridge
 
-L'APK offre due modalità principali:
+L'APK offre il bridge PC via Wi-Fi con dashboard real-time:
 
 ```text
-PORTABLE TOUCH
-RC-N1C → Android → controlli touch del simulatore
-
 PC BRIDGE
 RC-N1C → Android → UDP/Wi-Fi → PC → gamepad virtuale
 ```
 
-**Portable Touch** è la modalità consigliata sul telefono: dopo aver abilitato una volta RC-N1C Flight Bridge in Accessibilità, funziona offline senza root, Shizuku, ADB o Wi-Fi. Il primo profilo supportato è FPV Freerider.
-
-**PC Bridge** mantiene il comportamento esistente e l'autodiscovery nella rete locale. Termux resta supportato come alternativa; vedi [docs/uso-wireless.md](docs/uso-wireless.md).
+Il bridge mantiene l'autodiscovery nella rete locale e mostra stick, pulsanti, modalità, pacchetti e RTT. Termux resta supportato come alternativa; vedi [docs/uso-wireless.md](docs/uso-wireless.md).
 
 Per ricostruire l'APK servono JDK 17, Android SDK 34 e Gradle 8.7+.
 

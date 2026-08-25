@@ -10,8 +10,8 @@ android {
         applicationId = "com.drone.rcn1cbridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 21
-        versionName = "3.3.0-beta9-rollback"
+        versionCode = 22
+        versionName = "3.3.0-beta10"
     }
 
     sourceSets {

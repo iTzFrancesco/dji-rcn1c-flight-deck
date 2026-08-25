@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   build-apk:
-    if: ${{ !contains(github.ref_name, '-beta') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,4 +54,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: wireless/RCN1C_Bridge.apk
+          prerelease: ${{ contains(github.ref_name, '-beta') }}
           generate_release_notes: true

@@ -24,6 +24,7 @@ TESTS = [
     'test_receiver.py',
     'test_dashboard_udp.py',
     'test_dashboard_modes.py',
+    'test_android_app_surface.py',
 ]
 
 fails = 0

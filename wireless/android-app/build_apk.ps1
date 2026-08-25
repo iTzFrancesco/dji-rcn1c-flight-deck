@@ -7,7 +7,7 @@ $gradle = Get-Command gradle -ErrorAction SilentlyContinue
 if (-not $gradle) {
     throw @'
 Gradle non trovato nel PATH.
-Il branch Android Gamepad usa ora il build Gradle per Shizuku + uinput nativo.
+L'app Android usa il build Gradle per il bridge Wi-Fi e la dashboard RC.
 Installa Gradle 8.7+ oppure apri wireless/android-app in Android Studio.
 '@
 }
