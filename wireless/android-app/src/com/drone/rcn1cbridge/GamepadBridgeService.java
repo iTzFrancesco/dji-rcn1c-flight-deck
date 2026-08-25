@@ -27,6 +27,7 @@ public final class GamepadBridgeService extends Service {
 
     public static volatile boolean active = false;
     public static volatile boolean gamepadReady = false;
+    public static volatile String backend = "--";
     public static volatile String status = "Fermato";
     public static volatile Rcn1cUsbReader.Frame latestFrame = null;
 
@@ -61,6 +62,7 @@ public final class GamepadBridgeService extends Service {
         if (gamepad == null) {
             gamepad = new UInputGamepad(this, (ready, message) -> {
                 gamepadReady = ready;
+                backend = ready && gamepad != null ? gamepad.getBackendName() : "--";
                 setStatus(message);
                 if (ready) startReaderIfPossible();
             });
@@ -126,6 +128,7 @@ public final class GamepadBridgeService extends Service {
     public void onDestroy() {
         active = false;
         gamepadReady = false;
+        backend = "--";
         status = "Fermato";
         latestFrame = null;
         try {
@@ -182,7 +185,8 @@ public final class GamepadBridgeService extends Service {
         Notification.Builder b = Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
-        return b.setContentTitle("RC-N1C Flight Bridge")
+        String suffix = "--".equals(backend) ? "" : " · " + backend;
+        return b.setContentTitle("RC-N1C Flight Bridge" + suffix)
                 .setContentText(text)
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setOngoing(true)
