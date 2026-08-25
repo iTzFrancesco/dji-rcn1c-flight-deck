@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.drone.rcn1cbridge"
-    android:versionCode="14"
-    android:versionName="3.3.0-beta2">
+    android:versionCode="16"
+    android:versionName="3.3.0-beta4">
 
     <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
 
@@ -15,7 +15,6 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <queries>
-        <package android:name="moe.shizuku.privileged.api"/>
         <package android:name="com.Orqa.FPVSkyDive"/>
         <package android:name="com.FullFocusStudio.FeelFPV"/>
         <package android:name="com.Freeride.Freerider_FREE"/>
@@ -46,35 +45,11 @@
                 android:resource="@xml/device_filter"/>
         </activity>
 
-        <activity
-            android:name=".UpdateActivity"
-            android:exported="false"
-            android:screenOrientation="sensorLandscape"
-            android:configChanges="orientation|screenSize|keyboardHidden"/>
+        <activity android:name=".UpdateActivity" android:exported="false" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+        <activity android:name=".PortableTouchActivity" android:exported="false" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
+        <activity android:name=".MainActivity" android:exported="false" android:launchMode="singleTask" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
 
-        <activity
-            android:name=".PortableTouchActivity"
-            android:exported="false"
-            android:screenOrientation="sensorLandscape"
-            android:configChanges="orientation|screenSize|keyboardHidden"/>
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="false"
-            android:launchMode="singleTask"
-            android:screenOrientation="sensorLandscape"
-            android:configChanges="orientation|screenSize|keyboardHidden"/>
-
-        <activity
-            android:name=".GamepadActivity"
-            android:exported="false"
-            android:screenOrientation="sensorLandscape"
-            android:configChanges="orientation|screenSize|keyboardHidden"/>
-
-        <service
-            android:name=".PortableTouchBridgeService"
-            android:exported="false"
-            android:foregroundServiceType="connectedDevice"/>
+        <service android:name=".PortableTouchBridgeService" android:exported="false" android:foregroundServiceType="connectedDevice"/>
 
         <service
             android:name=".PortableTouchAccessibilityService"
@@ -84,23 +59,8 @@
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService"/>
             </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/touch_accessibility_service"/>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/touch_accessibility_service"/>
         </service>
-
-        <service
-            android:name=".GamepadBridgeService"
-            android:exported="false"
-            android:foregroundServiceType="connectedDevice"/>
-
-        <provider
-            android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="com.drone.rcn1cbridge.shizuku"
-            android:exported="true"
-            android:multiprocess="false"
-            android:enabled="true"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"/>
 
         <provider
             android:name=".ApkFileProvider"
