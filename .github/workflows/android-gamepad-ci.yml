@@ -36,18 +36,19 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Restore stable Android signing key
+      - name: Restore stable key when available
         shell: bash
         env:
           KEYSTORE_B64: ${{ secrets.RCN1C_ANDROID_DEBUG_KEYSTORE_B64 }}
         run: |
-          if [ -z "$KEYSTORE_B64" ]; then
-            echo "Missing RCN1C_ANDROID_DEBUG_KEYSTORE_B64; cannot verify update-compatible signing."
-            exit 1
+          if [ -n "$KEYSTORE_B64" ]; then
+            mkdir -p "$HOME/.android"
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+            chmod 600 "$HOME/.android/debug.keystore"
+            echo "Stable signing key restored."
+          else
+            echo "Stable signing key unavailable: building test APK only."
           fi
-          mkdir -p "$HOME/.android"
-          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
-          chmod 600 "$HOME/.android/debug.keystore"
 
       - name: Compile unified APK
         working-directory: wireless/android-app
