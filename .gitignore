@@ -12,6 +12,15 @@ tests/flight_deck_smoke.png
 bridge_out.txt
 bridge_err.txt
 
+# Registrazioni di volo locali
+registrazioni/*.mp4
+registrazioni/*.csv
+registrazioni/*.json
+
+# Materiale privato per la firma Android
+stable-key/RCN1C_ANDROID_DEBUG_KEYSTORE_B64.txt
+stable-key/RCN1C_Flight_Bridge_signing.keystore
+
 # Report generati dalle sonde sperimentali
 wireless/*_report.txt
 
