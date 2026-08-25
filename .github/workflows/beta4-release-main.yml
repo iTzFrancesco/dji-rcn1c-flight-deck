@@ -48,7 +48,7 @@ jobs:
           readme = readme.replace('Il workflow `.github/workflows/release.yml` ricostruisce e pubblica l\'APK quando viene creato un tag versione. Il branch `feature/android-virtual-gamepad` ha inoltre una CI dedicata che compila l\'APK dopo le modifiche Android.', 'Il workflow `.github/workflows/release.yml` ricostruisce, verifica la firma stabile e pubblica `RCN1C_Bridge.apk` per le release stabili.')
           (root / 'README.md').write_text(readme, encoding='utf-8')
 
-          for rel in ['wireless/android-app/src/com/drone/rcn1cbridge/GamepadActivity.java','wireless/android-app/src/com/drone/rcn1cbridge/GamepadBridgeService.java','docs/android-gamepad.md','.github/workflows/android-gamepad-ci.yml','.github/workflows/one-time-beta4-main.yml']:
+          for rel in ['wireless/android-app/src/com/drone/rcn1cbridge/GamepadActivity.java','wireless/android-app/src/com/drone/rcn1cbridge/GamepadBridgeService.java','docs/android-gamepad.md','.github/workflows/android-gamepad-ci.yml']:
               f = root / rel
               if f.exists(): f.unlink()
           for rel in ['wireless/android-app/src/com/drone/rcn1cbridge/uinput','wireless/android-app/cpp']:
@@ -121,3 +121,5 @@ jobs:
         with:
           name: RCN1C-Flight-Bridge-v3.3.0-beta4-STABLE
           path: wireless/RCN1C_Bridge.apk
+
+# Triggered after removing the invalid bootstrap workflow.
