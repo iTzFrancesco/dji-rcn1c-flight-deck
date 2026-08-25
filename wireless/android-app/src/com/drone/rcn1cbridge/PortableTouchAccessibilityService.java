@@ -16,7 +16,10 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -111,31 +114,19 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
     }
 
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null || event.getPackageName() == null) return;
-        foregroundPackage = event.getPackageName().toString();
-        // dispatchGesture is global Android input. Never let an armed gesture survive
-        // a foreground-package change: otherwise Recents/Home/SystemUI can receive the
-        // same synthetic fingers that were meant for the simulator.
-        if (explicitlyArmed && (!isSupportedGame(foregroundPackage)
-                || !foregroundPackage.equals(armedPackage))) {
-            explicitlyArmed = false;
-            armedPackage = "";
-            releaseRequested = true;
-            lastState = "Touch sospeso · fuori dal gioco";
-            scheduleDrive(0);
-            return;
-        }
-        if (getPackageName().equals(foregroundPackage)) {
-            explicitlyArmed = false;
-            armedPackage = "";
-            releaseRequested = true;
-            lastState = "Touch sospeso · Flight Bridge in primo piano";
-            scheduleDrive(0);
-        } else if (isSupportedGame(foregroundPackage) && !explicitlyArmed) {
-            lastState = "Gioco rilevato · in attesa di avvio";
-        }
+public void onAccessibilityEvent(AccessibilityEvent event) {
+    if (event == null || event.getPackageName() == null) return;
+    foregroundPackage = event.getPackageName().toString();
+    // Unity may emit sparse Accessibility events. They are hints only; the actual
+    // safety gate is the active interactive Android window resolved in shouldDrive().
+    if (getPackageName().equals(foregroundPackage)) {
+        explicitlyArmed = false;
+        armedPackage = "";
+        releaseRequested = true;
+        lastState = "Touch sospeso · Flight Bridge in primo piano";
     }
+    scheduleDrive(0);
+}
 
     @Override
     public void onInterrupt() {
@@ -162,15 +153,45 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
         else handler.postDelayed(r, delayMs);
     }
 
-    private boolean shouldDrive() {
-        return !calibrating
-                && explicitlyArmed
-                && !releaseRequested
-                && isSupportedGame(foregroundPackage)
-                && foregroundPackage.equals(armedPackage)
-                && PortableTouchBridgeService.active
-                && PortableTouchBridgeService.latestFrame != null;
+    private String resolveActivePackage() {
+    try {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root != null && root.getPackageName() != null) {
+            return root.getPackageName().toString();
+        }
+    } catch (Throwable ignored) {}
+
+    try {
+        List<AccessibilityWindowInfo> windows = getWindows();
+        if (windows != null) {
+            for (AccessibilityWindowInfo window : windows) {
+                if (window == null || (!window.isActive() && !window.isFocused())) continue;
+                AccessibilityNodeInfo root = window.getRoot();
+                if (root != null && root.getPackageName() != null) {
+                    return root.getPackageName().toString();
+                }
+            }
+        }
+    } catch (Throwable ignored) {}
+
+    return foregroundPackage == null ? "" : foregroundPackage;
+}
+
+private boolean shouldDrive() {
+    String activePackage = resolveActivePackage();
+    if (activePackage != null && !activePackage.isEmpty()) foregroundPackage = activePackage;
+    boolean correctWindow = isSupportedGame(activePackage) && activePackage.equals(armedPackage);
+    if (explicitlyArmed && !correctWindow && !releaseRequested) {
+        lastState = "WAIT GAME · " + (activePackage == null || activePackage.isEmpty()
+                ? "finestra sconosciuta" : activePackage);
     }
+    return !calibrating
+            && explicitlyArmed
+            && !releaseRequested
+            && correctWindow
+            && PortableTouchBridgeService.active
+            && PortableTouchBridgeService.latestFrame != null;
+}
 
     private void drive() {
         if (gestureInFlight) return;
@@ -319,18 +340,11 @@ public final class PortableTouchAccessibilityService extends AccessibilityServic
         calibrationOverlay = null;
         calibrating = false;
         releaseRequested = false;
-        if (save && isSupportedGame(foregroundPackage)) {
-            armedPackage = foregroundPackage;
-            explicitlyArmed = true;
-            releaseRequested = false;
-            lastState = "ARMED · profilo calibrato";
-        } else {
-            armedPackage = "";
-            explicitlyArmed = false;
-            releaseRequested = true;
-            lastState = save ? "Calibrazione salvata · riapri il gioco" : "Calibrazione annullata";
-        }
-        scheduleDrive(180);
+        armedPackage = "";
+    explicitlyArmed = false;
+    releaseRequested = true;
+    lastState = save ? "Calibrazione salvata · premi APRI FPV FREERIDER" : "Calibrazione annullata";
+    scheduleDrive(180);
     }
 
     private final class CalibrationOverlay extends View {
