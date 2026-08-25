@@ -1,0 +1,252 @@
+name: Apply Portable Touch beta2 fixes
+
+on:
+  push:
+    branches:
+      - feature/portable-touch-fix
+    paths:
+      - '.github/workflows/apply-portable-touch-beta2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/portable-touch-fix
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android toolchain
+        shell: bash
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1" "ndk;26.3.11579264"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Apply beta2 fixes
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          root = Path('wireless/android-app')
+
+          # Portable Touch: explicit arming, reliable non-empty gestures, wider calibration.
+          p = root/'src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java'
+          s = p.read_text()
+          s = s.replace('private boolean calibrating = false;', 'private boolean calibrating = false;\n    private boolean explicitlyArmed = false;')
+          marker = '''    public static boolean requestCalibration() {\n        PortableTouchAccessibilityService s = instance;\n        if (s == null) return false;\n        s.handler.post(s::showCalibrationOverlay);\n        return true;\n    }\n'''
+          replacement = marker + '''\n    public static boolean armForGame(String label) {\n        PortableTouchAccessibilityService s = instance;\n        if (s == null) return false;\n        s.handler.post(() -> {\n            s.explicitlyArmed = true;\n            s.releaseRequested = false;\n            lastState = "ARMED · " + label;\n            s.drive();\n        });\n        return true;\n    }\n\n    public static void disarm() {\n        PortableTouchAccessibilityService s = instance;\n        if (s == null) return;\n        s.handler.post(() -> {\n            s.explicitlyArmed = false;\n            s.releaseRequested = true;\n            lastState = "Touch disarmato";\n            s.drive();\n        });\n    }\n'''
+          if marker not in s: raise SystemExit('requestCalibration marker not found')
+          s = s.replace(marker, replacement)
+          old = '''        foregroundPackage = event.getPackageName().toString();\n        releaseRequested = !isSupportedGame(foregroundPackage);\n        drive();'''
+          new = '''        foregroundPackage = event.getPackageName().toString();\n        if (isSupportedGame(foregroundPackage)) {\n            explicitlyArmed = true;\n            releaseRequested = false;\n            lastState = "ARMED · " + foregroundPackage;\n        } else if (getPackageName().equals(foregroundPackage)) {\n            explicitlyArmed = false;\n            releaseRequested = true;\n        }\n        drive();'''
+          if old not in s: raise SystemExit('accessibility event marker not found')
+          s = s.replace(old, new)
+          s = s.replace('return !calibrating\n                && !releaseRequested', 'return !calibrating\n                && explicitlyArmed\n                && !releaseRequested')
+          s = s.replace('Path leftPath = new Path(); leftPath.moveTo(p[0], p[1]);\n        Path rightPath = new Path(); rightPath.moveTo(p[2], p[3]);',
+                        'Path leftPath = new Path(); leftPath.moveTo(p[0], p[1]); leftPath.lineTo(p[0] + 0.01f, p[1]);\n        Path rightPath = new Path(); rightPath.moveTo(p[2], p[3]); rightPath.lineTo(p[2] + 0.01f, p[3]);')
+          s = s.replace('lastState = "Touch chain reset: " + safeMessage(t);', 'lastState = "CANCELLED/RESET · " + safeMessage(t);')
+          s = s.replace('lastState = finalRelease ? "Touch rilasciato" : "Touch Bridge attivo";', 'lastState = finalRelease ? "Touch rilasciato" : "DISPATCHING · " + foregroundPackage;')
+          s = s.replace('radius=Math.min(getHeight()*0.35f, radius+10*density);', 'radius=Math.min(getHeight()*0.48f, radius+10*density);')
+          old_move = 'float bottom=getHeight()-70*density;\n            x=clamp(x,radius,getWidth()-radius); y=clamp(y,65*density+radius,bottom-radius);'
+          new_move = 'float edge=8*density;\n            float top=58*density;\n            float bottom=getHeight()-64*density;\n            x=clamp(x,edge,getWidth()-edge); y=clamp(y,top,bottom);'
+          if old_move not in s: raise SystemExit('calibration clamp marker not found')
+          s = s.replace(old_move, new_move)
+          old_hide = 'lastState = save ? "Profilo touch salvato" : "Calibrazione annullata";\n        handler.postDelayed(this::drive, 120);'
+          new_hide = '''if (save) {\n            explicitlyArmed = true;\n            releaseRequested = false;\n            lastState = "ARMED · profilo calibrato";\n        } else {\n            explicitlyArmed = false;\n            releaseRequested = true;\n            lastState = "Calibrazione annullata";\n        }\n        handler.postDelayed(this::drive, 120);'''
+          if old_hide not in s: raise SystemExit('hide calibration marker not found')
+          s = s.replace(old_hide, new_hide)
+          p.write_text(s)
+
+          # Portable Touch activity: arm explicitly after game launch; disarm when returning.
+          p = root/'src/com/drone/rcn1cbridge/PortableTouchActivity.java'
+          s = p.read_text()
+          s = s.replace('''    @Override protected void onResume() {\n        super.onResume();\n        ui.removeCallbacks(ticker);''', '''    @Override protected void onResume() {\n        super.onResume();\n        PortableTouchAccessibilityService.disarm();\n        ui.removeCallbacks(ticker);''')
+          old = '''        startActivity(game);\n        if (calibrate) {\n            ui.postDelayed(() -> {\n                if (!PortableTouchAccessibilityService.requestCalibration()) {\n                    toast("Servizio Accessibilità non ancora collegato");\n                }\n            }, 900);\n        }'''
+          new = '''        startActivity(game);\n        if (calibrate) {\n            ui.postDelayed(() -> {\n                if (!PortableTouchAccessibilityService.requestCalibration()) {\n                    toast("Servizio Accessibilità non ancora collegato");\n                }\n            }, 900);\n        } else {\n            ui.postDelayed(() -> {\n                if (!PortableTouchAccessibilityService.armForGame("FPV Freerider")) {\n                    toast("Servizio Accessibilità non collegato");\n                }\n            }, 350);\n        }'''
+          if old not in s: raise SystemExit('openFreerider marker not found')
+          s = s.replace(old, new)
+          p.write_text(s)
+
+          # Version beta2.
+          p = root/'build.gradle.kts'
+          s = p.read_text().replace('versionCode = 13', 'versionCode = 14').replace('versionName = "3.3.0-beta1"', 'versionName = "3.3.0-beta2"')
+          p.write_text(s)
+          p = root/'AndroidManifest.xml'
+          s = p.read_text().replace('android:versionCode="13"', 'android:versionCode="14"').replace('android:versionName="3.3.0-beta1"', 'android:versionName="3.3.0-beta2"')
+          s = s.replace('''        <activity\n            android:name=".PortableTouchActivity"''', '''        <activity\n            android:name=".UpdateActivity"\n            android:exported="false"\n            android:screenOrientation="sensorLandscape"\n            android:configChanges="orientation|screenSize|keyboardHidden"/>\n\n        <activity\n            android:name=".PortableTouchActivity"''')
+          p.write_text(s)
+
+          # Existing PC updater must report the real build version and compare prereleases correctly.
+          p = root/'src/com/drone/rcn1cbridge/MainActivity.java'
+          s = p.read_text().replace('private static final String APP_VERSION = "3.2.0";', 'private static final String APP_VERSION = BuildConfig.VERSION_NAME;')
+          pattern = r'''    private static int compareVersions\(String left, String right\) \{.*?\n    \}\n\n    private void startBridge'''
+          repl = '''    private static int compareVersions(String left, String right) {\n        String[] la = left.split("-", 2);\n        String[] ra = right.split("-", 2);\n        String[] a = la[0].split("\\\\.");\n        String[] b = ra[0].split("\\\\.");\n        int count = Math.max(a.length, b.length);\n        for (int i = 0; i < count; i++) {\n            int av = i < a.length ? Integer.parseInt(a[i].replaceAll("[^0-9]", "")) : 0;\n            int bv = i < b.length ? Integer.parseInt(b[i].replaceAll("[^0-9]", "")) : 0;\n            if (av != bv) return av < bv ? -1 : 1;\n        }\n        if (la.length == 1 && ra.length > 1) return 1;\n        if (la.length > 1 && ra.length == 1) return -1;\n        if (la.length == 1) return 0;\n        java.util.regex.Matcher lm = Pattern.compile("(\\\\d+)").matcher(la[1]);\n        java.util.regex.Matcher rm = Pattern.compile("(\\\\d+)").matcher(ra[1]);\n        int ln = lm.find() ? Integer.parseInt(lm.group(1)) : 0;\n        int rn = rm.find() ? Integer.parseInt(rm.group(1)) : 0;\n        if (ln != rn) return ln < rn ? -1 : 1;\n        return la[1].compareToIgnoreCase(ra[1]);\n    }\n\n    private void startBridge'''
+          s2, n = re.subn(pattern, repl, s, flags=re.S)
+          if n != 1: raise SystemExit(f'compareVersions replacement count {n}')
+          p.write_text(s2)
+
+          # Clear accidental placeholder note and replace with useful notes.
+          Path('docs/touch-fix-notes.md').write_text('''# Portable Touch beta2\n\n- Explicit game arming: Unity/immersive window events are no longer required to start touch injection.\n- Initial two-finger gesture always has a non-empty path.\n- Calibration centers can move almost to the display edges; radius is independent.\n- State now reports ARMED / DISPATCHING / CANCELLED for easier hardware diagnosis.\n- Shizuku/uinput remains available as Android Gamepad backup.\n''')
+
+      - name: Write clearer launcher and updater
+        shell: bash
+        run: |
+          cat > wireless/android-app/src/com/drone/rcn1cbridge/LauncherActivity.java <<'JAVA'
+          package com.drone.rcn1cbridge;
+
+          import android.app.Activity;
+          import android.content.Intent;
+          import android.graphics.drawable.GradientDrawable;
+          import android.os.Bundle;
+          import android.view.Gravity;
+          import android.view.ViewGroup;
+          import android.widget.Button;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
+          import rikka.shizuku.Shizuku;
+
+          public final class LauncherActivity extends Activity {
+              private TextView shizukuStatus;
+
+              @Override protected void onCreate(Bundle savedInstanceState) { super.onCreate(savedInstanceState); buildUi(); }
+              @Override protected void onResume() { super.onResume(); if (shizukuStatus != null) refreshShizukuStatus(); }
+
+              private void buildUi() {
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setPadding(dp(14), dp(10), dp(14), dp(8));
+                  root.setBackgroundColor(0xFF0B0F14);
+
+                  TextView title = text("RC-N1C FLIGHT BRIDGE", 18, 0xFFEAF2FF, true);
+                  title.setGravity(Gravity.CENTER); root.addView(title);
+                  TextView sub = text("v" + BuildConfig.VERSION_NAME + "  ·  scegli cosa vuoi fare", 10, 0xFF8294A8, false);
+                  sub.setGravity(Gravity.CENTER); sub.setPadding(0, dp(2), 0, dp(8)); root.addView(sub);
+
+                  Button phone = modeButton("1 · GIOCA SUL TELEFONO  ·  CONSIGLIATO",
+                          "RC → gioco Android · offline · niente Wi-Fi, root o Shizuku",
+                          0xFF10372F, 0xFF2ED573);
+                  phone.setOnClickListener(v -> startActivity(new Intent(this, PortableTouchActivity.class)));
+                  root.addView(phone, cardLp(72));
+
+                  Button pc = modeButton("2 · USA IL PC",
+                          "Il telefono manda il radiocomando via Wi-Fi al simulatore sul PC",
+                          0xFF102E44, 0xFF39C5FF);
+                  pc.setOnClickListener(v -> startActivity(new Intent(this, MainActivity.class)));
+                  LinearLayout.LayoutParams p2 = cardLp(72); p2.topMargin = dp(7); root.addView(pc, p2);
+
+                  Button backup = modeButton("3 · GAMEPAD ANDROID  ·  BACKUP",
+                          "Provalo se Touch non va · controller di sistema · richiede Shizuku",
+                          0xFF241D38, 0xFF9C7CFF);
+                  backup.setOnClickListener(v -> startActivity(new Intent(this, GamepadActivity.class)));
+                  LinearLayout.LayoutParams p3 = cardLp(72); p3.topMargin = dp(7); root.addView(backup, p3);
+
+                  LinearLayout bottom = new LinearLayout(this); bottom.setGravity(Gravity.CENTER_VERTICAL);
+                  Button updates = smallButton("AGGIORNAMENTI");
+                  updates.setOnClickListener(v -> startActivity(new Intent(this, UpdateActivity.class)));
+                  bottom.addView(updates, new LinearLayout.LayoutParams(0, dp(38), 1f));
+                  shizukuStatus = text("", 9, 0xFF607184, false); shizukuStatus.setGravity(Gravity.CENTER);
+                  LinearLayout.LayoutParams st = new LinearLayout.LayoutParams(0, dp(38), 1.5f); st.leftMargin=dp(7); bottom.addView(shizukuStatus, st);
+                  LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)); bp.topMargin=dp(7); root.addView(bottom,bp);
+                  refreshShizukuStatus(); setContentView(root);
+              }
+
+              private void refreshShizukuStatus() {
+                  boolean running=false, granted=false;
+                  try { running=Shizuku.pingBinder(); granted=running && Shizuku.checkSelfPermission()==android.content.pm.PackageManager.PERMISSION_GRANTED; } catch(Throwable ignored){}
+                  if (granted) { shizukuStatus.setText("Backup: Shizuku pronto"); shizukuStatus.setTextColor(0xFF2ED573); }
+                  else if (running) { shizukuStatus.setText("Backup: Shizuku da autorizzare"); shizukuStatus.setTextColor(0xFFFFD166); }
+                  else { shizukuStatus.setText("Shizuku serve solo alla modalità 3"); shizukuStatus.setTextColor(0xFF607184); }
+              }
+
+              private TextView text(String s,int size,int color,boolean bold){ TextView t=new TextView(this); t.setText(s); t.setTextSize(size); t.setTextColor(color); if(bold)t.setTypeface(android.graphics.Typeface.DEFAULT,android.graphics.Typeface.BOLD); return t; }
+              private Button modeButton(String a,String b,int fill,int stroke){ Button v=new Button(this); v.setText(a+"\n"+b); v.setAllCaps(false); v.setTextColor(0xFFEAF2FF); v.setTextSize(11); v.setGravity(Gravity.CENTER_VERTICAL|Gravity.START); v.setPadding(dp(14),0,dp(14),0); v.setMinHeight(0); v.setStateListAnimator(null); GradientDrawable g=new GradientDrawable(); g.setColor(fill); g.setCornerRadius(dp(12)); g.setStroke(dp(1),stroke); v.setBackground(g); return v; }
+              private Button smallButton(String s){ Button b=modeButton(s,"",0xFF171E28,0xFF52657A); b.setGravity(Gravity.CENTER); b.setTextSize(10); return b; }
+              private LinearLayout.LayoutParams cardLp(int h){ return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(h)); }
+              private int dp(float v){ return Math.round(v*getResources().getDisplayMetrics().density); }
+          }
+          JAVA
+
+          cat > wireless/android-app/src/com/drone/rcn1cbridge/UpdateActivity.java <<'JAVA'
+          package com.drone.rcn1cbridge;
+
+          import android.app.Activity;
+          import android.app.AlertDialog;
+          import android.content.ActivityNotFoundException;
+          import android.content.ClipData;
+          import android.content.Intent;
+          import android.content.pm.PackageInfo;
+          import android.content.pm.PackageManager;
+          import android.content.pm.Signature;
+          import android.graphics.drawable.GradientDrawable;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.os.Environment;
+          import android.view.Gravity;
+          import android.view.ViewGroup;
+          import android.widget.Button;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
+          import android.widget.Toast;
+          import java.io.*;
+          import java.net.*;
+          import java.security.MessageDigest;
+          import java.util.regex.*;
+
+          public final class UpdateActivity extends Activity {
+              private static final String API="https://api.github.com/repos/iTzFrancesco/dji-rcn1c-flight-deck/releases/latest";
+              private static final String TRUST="https://github.com/iTzFrancesco/dji-rcn1c-flight-deck/";
+              private TextView status; private Button action; private String remoteVersion, remoteUrl;
+
+              @Override protected void onCreate(Bundle b){ super.onCreate(b); buildUi(); check(); }
+              private void buildUi(){
+                  LinearLayout r=new LinearLayout(this); r.setOrientation(LinearLayout.VERTICAL); r.setGravity(Gravity.CENTER); r.setPadding(dp(24),dp(18),dp(24),dp(18)); r.setBackgroundColor(0xFF0B0F14);
+                  TextView t=txt("AGGIORNAMENTI",20,0xFFEAF2FF,true); t.setGravity(Gravity.CENTER); r.addView(t);
+                  TextView v=txt("Installata: v"+BuildConfig.VERSION_NAME,12,0xFF8294A8,false); v.setGravity(Gravity.CENTER); v.setPadding(0,dp(7),0,dp(16)); r.addView(v);
+                  status=txt("Controllo GitHub…",12,0xFF92A4B8,false); status.setGravity(Gravity.CENTER); r.addView(status,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f));
+                  action=btn("CONTROLLO…",0xFF123B32,0xFF2ED573); action.setEnabled(false); action.setOnClickListener(x->{ if(remoteUrl!=null) download(); else check(); }); r.addView(action,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(48)));
+                  Button back=btn("INDIETRO",0xFF171E28,0xFF52657A); back.setOnClickListener(x->finish()); LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(42)); bp.topMargin=dp(8); r.addView(back,bp); setContentView(r);
+              }
+              private void check(){ remoteUrl=null; action.setEnabled(false); action.setText("CONTROLLO…"); status.setText("Controllo ultima release…"); new Thread(()->{ HttpURLConnection c=null; try{ c=(HttpURLConnection)new URL(API).openConnection(); c.setConnectTimeout(12000); c.setReadTimeout(12000); c.setRequestProperty("Accept","application/vnd.github+json"); c.setRequestProperty("User-Agent","RCN1C-Flight-Bridge/"+BuildConfig.VERSION_NAME); if(c.getResponseCode()!=200)throw new IOException("GitHub HTTP "+c.getResponseCode()); String j=read(c.getInputStream()); String tag=value(j,"\\\"tag_name\\\"\\s*:\\s*\\\"([^\\\"]+)\\\""); String url=value(j,"\\\"name\\\"\\s*:\\s*\\\"RCN1C_Bridge\\\\.apk\\\".*?\\\"browser_download_url\\\"\\s*:\\s*\\\"([^\\\"]+)\\\""); if(tag==null||url==null||!url.startsWith(TRUST))throw new IOException("APK release non trovata"); String rv=tag.startsWith("v")?tag.substring(1):tag; runOnUiThread(()->{ if(compare(rv,BuildConfig.VERSION_NAME)>0){ remoteVersion=rv; remoteUrl=url; status.setText("Nuova versione: v"+rv); action.setText("SCARICA E AGGIORNA"); } else { status.setText("Sei già aggiornato · v"+BuildConfig.VERSION_NAME); action.setText("RICONTROLLA"); } action.setEnabled(true); }); }catch(Exception e){ runOnUiThread(()->{status.setText("Controllo fallito: "+e.getMessage()); action.setText("RIPROVA"); action.setEnabled(true);}); }finally{if(c!=null)c.disconnect();}},"update-check").start(); }
+              private void download(){ action.setEnabled(false); status.setText("Scarico v"+remoteVersion+"…"); final String url=remoteUrl, ver=remoteVersion; new Thread(()->{ HttpURLConnection c=null; try{ File d=getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS); if(d==null)throw new IOException("Download non disponibile"); d.mkdirs(); File apk=new File(d,"RCN1C_Bridge-"+ver+".apk"); c=(HttpURLConnection)new URL(url).openConnection(); c.setConnectTimeout(15000); c.setReadTimeout(30000); c.setInstanceFollowRedirects(true); if(c.getResponseCode()!=200)throw new IOException("HTTP "+c.getResponseCode()); try(InputStream in=new BufferedInputStream(c.getInputStream()); FileOutputStream out=new FileOutputStream(apk)){ byte[] buf=new byte[8192]; for(int n;(n=in.read(buf))!=-1;)out.write(buf,0,n); } if(apk.length()<10000)throw new IOException("APK non valida"); if(!sameSigner(apk))throw new SecurityException("firma APK diversa: aggiornamento bloccato"); ApkFileProvider.setSharedFile(apk); Uri u=ApkFileProvider.uriFor(apk); Intent i=new Intent(Intent.ACTION_VIEW); i.setDataAndType(u,"application/vnd.android.package-archive"); i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); i.setClipData(ClipData.newRawUri("RCN1C_Bridge",u)); runOnUiThread(()->{status.setText("APK verificata · conferma l'installazione"); action.setEnabled(true); try{startActivity(i);}catch(ActivityNotFoundException e){toast("Installatore APK non disponibile");}}); }catch(Exception e){runOnUiThread(()->{status.setText("Aggiornamento fermato: "+e.getMessage()); action.setEnabled(true);});}finally{if(c!=null)c.disconnect();}},"update-download").start(); }
+              private boolean sameSigner(File apk)throws Exception{ PackageManager pm=getPackageManager(); PackageInfo cur, arc; if(Build.VERSION.SDK_INT>=28){ cur=pm.getPackageInfo(getPackageName(),PackageManager.GET_SIGNING_CERTIFICATES); arc=pm.getPackageArchiveInfo(apk.getAbsolutePath(),PackageManager.GET_SIGNING_CERTIFICATES); if(arc==null||arc.signingInfo==null)return false; return digest(cur.signingInfo.getApkContentsSigners()[0]).equals(digest(arc.signingInfo.getApkContentsSigners()[0])); } cur=pm.getPackageInfo(getPackageName(),PackageManager.GET_SIGNATURES); arc=pm.getPackageArchiveInfo(apk.getAbsolutePath(),PackageManager.GET_SIGNATURES); return arc!=null&&cur.signatures!=null&&arc.signatures!=null&&digest(cur.signatures[0]).equals(digest(arc.signatures[0])); }
+              private String digest(Signature s)throws Exception{ byte[] d=MessageDigest.getInstance("SHA-256").digest(s.toByteArray()); StringBuilder b=new StringBuilder(); for(byte x:d)b.append(String.format("%02x",x)); return b.toString(); }
+              private static int compare(String l,String r){ String[] la=l.split("-",2),ra=r.split("-",2); String[] a=la[0].split("\\."),b=ra[0].split("\\."); for(int i=0;i<Math.max(a.length,b.length);i++){int x=i<a.length?Integer.parseInt(a[i]):0,y=i<b.length?Integer.parseInt(b[i]):0;if(x!=y)return x<y?-1:1;} if(la.length==1&&ra.length>1)return 1;if(la.length>1&&ra.length==1)return -1;if(la.length==1)return 0; Matcher lm=Pattern.compile("(\\d+)").matcher(la[1]),rm=Pattern.compile("(\\d+)").matcher(ra[1]); int x=lm.find()?Integer.parseInt(lm.group(1)):0,y=rm.find()?Integer.parseInt(rm.group(1)):0; return x==y?la[1].compareToIgnoreCase(ra[1]):(x<y?-1:1); }
+              private static String read(InputStream i)throws IOException{try(InputStream in=i;ByteArrayOutputStream o=new ByteArrayOutputStream()){byte[]b=new byte[4096];for(int n;(n=in.read(b))!=-1;)o.write(b,0,n);return new String(o.toByteArray(),"UTF-8");}}
+              private static String value(String j,String e){Matcher m=Pattern.compile(e,Pattern.DOTALL).matcher(j);return m.find()?m.group(1).replace("\\/","/"):null;}
+              private TextView txt(String s,int z,int c,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(z);t.setTextColor(c);if(bold)t.setTypeface(android.graphics.Typeface.DEFAULT,android.graphics.Typeface.BOLD);return t;}
+              private Button btn(String s,int fill,int stroke){Button b=new Button(this);b.setText(s);b.setAllCaps(false);b.setTextColor(0xFFEAF2FF);b.setStateListAnimator(null);GradientDrawable g=new GradientDrawable();g.setColor(fill);g.setCornerRadius(dp(12));g.setStroke(dp(1),stroke);b.setBackground(g);return b;}
+              private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();} private int dp(float v){return Math.round(v*getResources().getDisplayMetrics().density);}
+          }
+          JAVA
+
+      - name: Build beta2
+        working-directory: wireless/android-app
+        run: gradle --no-daemon clean assembleRelease
+
+      - name: Commit source fixes
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add wireless/android-app docs/touch-fix-notes.md
+          git commit -m 'fix(android): portable touch beta2 and clearer launcher'
+          git push origin HEAD:feature/portable-touch-fix
+
+      - name: Upload beta2 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RCN1C-Flight-Bridge-v3.3.0-beta2
+          path: wireless/android-app/build/outputs/apk/release/*.apk
