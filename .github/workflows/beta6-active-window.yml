@@ -28,6 +28,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           service_path = Path('wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java')
           s = service_path.read_text(encoding='utf-8')
@@ -37,137 +38,79 @@ jobs:
               'import android.view.accessibility.AccessibilityEvent;\nimport android.view.accessibility.AccessibilityNodeInfo;\nimport android.view.accessibility.AccessibilityWindowInfo;\n\nimport java.util.List;\nimport java.util.concurrent.atomic.AtomicBoolean;'
           )
 
-          old_event = '''    @Override
-              public void onAccessibilityEvent(AccessibilityEvent event) {
-                  if (event == null || event.getPackageName() == null) return;
-                  foregroundPackage = event.getPackageName().toString();
-                  // dispatchGesture is global Android input. Never let an armed gesture survive
-                  // a foreground-package change: otherwise Recents/Home/SystemUI can receive the
-                  // same synthetic fingers that were meant for the simulator.
-                  if (explicitlyArmed && (!isSupportedGame(foregroundPackage)
-                          || !foregroundPackage.equals(armedPackage))) {
-                      explicitlyArmed = false;
-                      armedPackage = "";
-                      releaseRequested = true;
-                      lastState = "Touch sospeso · fuori dal gioco";
-                      scheduleDrive(0);
-                      return;
-                  }
-                  if (getPackageName().equals(foregroundPackage)) {
-                      explicitlyArmed = false;
-                      armedPackage = "";
-                      releaseRequested = true;
-                      lastState = "Touch sospeso · Flight Bridge in primo piano";
-                      scheduleDrive(0);
-                  } else if (isSupportedGame(foregroundPackage) && !explicitlyArmed) {
-                      lastState = "Gioco rilevato · in attesa di avvio";
-                  }
-              }
-          '''
-          # Normalize indentation because the source method starts at column 5.
-          old_event = old_event.replace('              ', '')
           new_event = '''    @Override
-              public void onAccessibilityEvent(AccessibilityEvent event) {
-                  if (event == null || event.getPackageName() == null) return;
-                  foregroundPackage = event.getPackageName().toString();
-                  // Accessibility events from Unity games can be sparse or missing. Treat them as
-                  // hints only; the actual gate is the currently active Android window resolved in
-                  // shouldDrive(). Returning to Flight Bridge still disarms immediately.
-                  if (getPackageName().equals(foregroundPackage)) {
-                      explicitlyArmed = false;
-                      armedPackage = "";
-                      releaseRequested = true;
-                      lastState = "Touch sospeso · Flight Bridge in primo piano";
-                  }
-                  scheduleDrive(0);
+          public void onAccessibilityEvent(AccessibilityEvent event) {
+              if (event == null || event.getPackageName() == null) return;
+              foregroundPackage = event.getPackageName().toString();
+              // Unity may emit sparse Accessibility events. They are hints only; the actual
+              // safety gate is the active interactive Android window resolved in shouldDrive().
+              if (getPackageName().equals(foregroundPackage)) {
+                  explicitlyArmed = false;
+                  armedPackage = "";
+                  releaseRequested = true;
+                  lastState = "Touch sospeso · Flight Bridge in primo piano";
               }
-          '''.replace('              ', '')
-          if old_event not in s:
-              raise SystemExit('onAccessibilityEvent block not found')
-          s = s.replace(old_event, new_event)
+              scheduleDrive(0);
+          }'''
+          pattern_event = r'    @Override\n    public void onAccessibilityEvent\(AccessibilityEvent event\) \{.*?^    \}\n\n    @Override\n    public void onInterrupt'
+          s, n = re.subn(pattern_event, new_event + '\n\n    @Override\n    public void onInterrupt', s, count=1, flags=re.S | re.M)
+          if n != 1:
+              raise SystemExit(f'onAccessibilityEvent replacement count={n}')
 
-          old_should = '''    private boolean shouldDrive() {
-                  return !calibrating
-                          && explicitlyArmed
-                          && !releaseRequested
-                          && isSupportedGame(foregroundPackage)
-                          && foregroundPackage.equals(armedPackage)
-                          && PortableTouchBridgeService.active
-                          && PortableTouchBridgeService.latestFrame != null;
-              }
-          '''.replace('              ', '')
           new_should = '''    private String resolveActivePackage() {
-                  // getRootInActiveWindow/getWindows do not depend on Unity emitting a window-state
-                  // AccessibilityEvent. They describe the interactive Android window that is really
-                  // in front, which is the safe boundary for global dispatchGesture().
-                  try {
-                      AccessibilityNodeInfo root = getRootInActiveWindow();
-                      if (root != null && root.getPackageName() != null) {
-                          return root.getPackageName().toString();
-                      }
-                  } catch (Throwable ignored) {}
+              try {
+                  AccessibilityNodeInfo root = getRootInActiveWindow();
+                  if (root != null && root.getPackageName() != null) {
+                      return root.getPackageName().toString();
+                  }
+              } catch (Throwable ignored) {}
 
-                  try {
-                      List<AccessibilityWindowInfo> windows = getWindows();
-                      if (windows != null) {
-                          for (AccessibilityWindowInfo window : windows) {
-                              if (window == null || (!window.isActive() && !window.isFocused())) continue;
-                              AccessibilityNodeInfo root = window.getRoot();
-                              if (root != null && root.getPackageName() != null) {
-                                  return root.getPackageName().toString();
-                              }
+              try {
+                  List<AccessibilityWindowInfo> windows = getWindows();
+                  if (windows != null) {
+                      for (AccessibilityWindowInfo window : windows) {
+                          if (window == null || (!window.isActive() && !window.isFocused())) continue;
+                          AccessibilityNodeInfo root = window.getRoot();
+                          if (root != null && root.getPackageName() != null) {
+                              return root.getPackageName().toString();
                           }
                       }
-                  } catch (Throwable ignored) {}
+                  }
+              } catch (Throwable ignored) {}
 
-                  return foregroundPackage == null ? "" : foregroundPackage;
+              return foregroundPackage == null ? "" : foregroundPackage;
+          }
+
+          private boolean shouldDrive() {
+              String activePackage = resolveActivePackage();
+              if (activePackage != null && !activePackage.isEmpty()) foregroundPackage = activePackage;
+              boolean correctWindow = isSupportedGame(activePackage) && activePackage.equals(armedPackage);
+              if (explicitlyArmed && !correctWindow && !releaseRequested) {
+                  lastState = "WAIT GAME · " + (activePackage == null || activePackage.isEmpty()
+                          ? "finestra sconosciuta" : activePackage);
               }
+              return !calibrating
+                      && explicitlyArmed
+                      && !releaseRequested
+                      && correctWindow
+                      && PortableTouchBridgeService.active
+                      && PortableTouchBridgeService.latestFrame != null;
+          }'''
+          pattern_should = r'    private boolean shouldDrive\(\) \{.*?^    \}\n\n    private void drive\(\)'
+          s, n = re.subn(pattern_should, new_should + '\n\n    private void drive()', s, count=1, flags=re.S | re.M)
+          if n != 1:
+              raise SystemExit(f'shouldDrive replacement count={n}')
 
-              private boolean shouldDrive() {
-                  String activePackage = resolveActivePackage();
-                  if (activePackage != null && !activePackage.isEmpty()) {
-                      foregroundPackage = activePackage;
-                  }
-                  boolean correctWindow = isSupportedGame(activePackage)
-                          && activePackage.equals(armedPackage);
-                  if (explicitlyArmed && !correctWindow && !releaseRequested) {
-                      lastState = "WAIT GAME · " + (activePackage == null || activePackage.isEmpty()
-                              ? "finestra sconosciuta" : activePackage);
-                  }
-                  return !calibrating
-                          && explicitlyArmed
-                          && !releaseRequested
-                          && correctWindow
-                          && PortableTouchBridgeService.active
-                          && PortableTouchBridgeService.latestFrame != null;
-              }
-          '''.replace('              ', '')
-          if old_should not in s:
-              raise SystemExit('shouldDrive block not found')
-          s = s.replace(old_should, new_should)
-
-          # Calibration should never auto-arm from a stale AccessibilityEvent. Save the profile and
-          # require the normal "Open FPV Freerider" flow to arm the exact game package.
-          old_cal = '''        if (save && isSupportedGame(foregroundPackage)) {
-                      armedPackage = foregroundPackage;
-                      explicitlyArmed = true;
-                      releaseRequested = false;
-                      lastState = "ARMED · profilo calibrato";
-                  } else {
-                      armedPackage = "";
-                      explicitlyArmed = false;
-                      releaseRequested = true;
-                      lastState = save ? "Calibrazione salvata · riapri il gioco" : "Calibrazione annullata";
-                  }
-          '''.replace('              ', '')
+          pattern_cal = r'        if \(save && isSupportedGame\(foregroundPackage\)\) \{.*?^        \}\n        scheduleDrive\(180\);'
           new_cal = '''        armedPackage = "";
-                  explicitlyArmed = false;
-                  releaseRequested = true;
-                  lastState = save ? "Calibrazione salvata · premi APRI FPV FREERIDER" : "Calibrazione annullata";
-          '''.replace('              ', '')
-          if old_cal not in s:
-              raise SystemExit('calibration arm block not found')
-          s = s.replace(old_cal, new_cal)
+              explicitlyArmed = false;
+              releaseRequested = true;
+              lastState = save ? "Calibrazione salvata · premi APRI FPV FREERIDER" : "Calibrazione annullata";
+              scheduleDrive(180);'''
+          s, n = re.subn(pattern_cal, new_cal, s, count=1, flags=re.S | re.M)
+          if n != 1:
+              raise SystemExit(f'calibration replacement count={n}')
+
           service_path.write_text(s, encoding='utf-8')
 
           xml_path = Path('wireless/android-app/res/xml/touch_accessibility_service.xml')
@@ -186,8 +129,8 @@ jobs:
       - name: Verify beta6 source guards
         shell: bash
         run: |
-          grep -q 'getRootInActiveWindow' wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java
-          grep -q 'getWindows()' wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java
+          grep -q 'AccessibilityNodeInfo root = getRootInActiveWindow' wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java
+          grep -q 'List<AccessibilityWindowInfo> windows = getWindows()' wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java
           grep -q 'WAIT GAME' wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java
           grep -q 'canRetrieveWindowContent="true"' wireless/android-app/res/xml/touch_accessibility_service.xml
           grep -q 'flagRetrieveInteractiveWindows' wireless/android-app/res/xml/touch_accessibility_service.xml
@@ -247,7 +190,7 @@ jobs:
           prerelease: false
           make_latest: true
           body: |
-            Portable Touch foreground detection now uses the active interactive Android window instead of relying on sparse Unity Accessibility events. System UI/Home/Recents remain blocked, while FPV Freerider can be detected even when it emits no window-state events. Adds WAIT GAME diagnostics.
+            Portable Touch now gates synthetic input using Android's active interactive window rather than relying on sparse Unity Accessibility events. Home, Recents and System UI stay blocked. Adds WAIT GAME diagnostics.
           files: wireless/RCN1C_Bridge.apk
 
       - name: Upload beta6 APK
