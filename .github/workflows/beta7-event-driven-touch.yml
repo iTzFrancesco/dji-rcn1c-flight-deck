@@ -1,0 +1,215 @@
+name: Build beta7 event-driven touch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/beta7-event-driven-touch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Apply event-driven touch patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java')
+          s = p.read_text(encoding='utf-8')
+
+          s = s.replace('private static final long STEP_MS = 32;', '''private static final long STEP_MS = 16;
+    private static final float DEADZONE = 0.045f;
+    private static final float MOVE_EPSILON_PX = 1.0f;''')
+          s = s.replace('private volatile boolean gestureInFlight = false;', '''private volatile boolean gestureInFlight = false;
+    private volatile boolean inputDirty = false;''')
+
+          s, n = re.subn(
+              r'public static void kick\(\) \{.*?\n    \}',
+              '''public static void kick() {
+        PortableTouchAccessibilityService s = instance;
+        if (s == null) return;
+        s.inputDirty = true;
+        if (!s.gestureInFlight) s.scheduleDrive(0);
+    }''',
+              s,
+              count=1,
+              flags=re.S,
+          )
+          if n != 1: raise SystemExit('kick patch failed')
+
+          s, n = re.subn(
+              r'    private void drive\(\) \{.*?\n    \}\n\n    private void startPointers',
+              '''    private void drive() {
+        if (gestureInFlight) return;
+        if (!shouldDrive()) {
+            if (leftStroke != null || rightStroke != null) dispatchRelease();
+            return;
+        }
+
+        Rcn1cUsbReader.Frame f = PortableTouchBridgeService.latestFrame;
+        if (f == null) return;
+        inputDirty = false;
+
+        // When the physical sticks are at rest, do not keep synthetic fingers pressed.
+        // This removes idle joystick drift and lets the touchscreen behave normally.
+        if (isNeutral(f)) {
+            if (leftStroke != null || rightStroke != null) {
+                releaseRequested = true;
+                dispatchRelease();
+            } else {
+                lastState = "READY · stick neutri";
+            }
+            return;
+        }
+
+        float[] target = targetPoints(f);
+        releaseRequested = false;
+        if (leftStroke == null || rightStroke == null) {
+            startPointers(target);
+        } else if (targetMoved(target)) {
+            continuePointers(target, true);
+        } else {
+            // A continued stroke keeps its pointer down after the gesture completes.
+            // Do not dispatch another identical gesture just as a keepalive.
+            lastState = "HOLD · input stabile";
+        }
+    }
+
+    private boolean targetMoved(float[] p) {
+        float dlx = p[0] - leftX, dly = p[1] - leftY;
+        float drx = p[2] - rightX, dry = p[3] - rightY;
+        float eps2 = MOVE_EPSILON_PX * MOVE_EPSILON_PX;
+        return dlx * dlx + dly * dly >= eps2 || drx * drx + dry * dry >= eps2;
+    }
+
+    private void startPointers''',
+              s,
+              count=1,
+              flags=re.S,
+          )
+          if n != 1: raise SystemExit('drive patch failed')
+
+          old = '''                if (finalRelease) resetGestureState();
+                else scheduleDrive(1);'''
+          new = '''                if (finalRelease) {
+                    resetGestureState();
+                } else if (inputDirty) {
+                    scheduleDrive(0);
+                }'''
+          if old not in s: raise SystemExit('onCompleted patch target missing')
+          s = s.replace(old, new, 1)
+
+          s, n = re.subn(
+              r'    private static float axis\(int value\) \{[^\n]*\}',
+              '''    private static float axis(int value) {
+        float v = Math.max(-1f, Math.min(1f, value / 32767f));
+        float a = Math.abs(v);
+        if (a <= DEADZONE) return 0f;
+        float scaled = (a - DEADZONE) / (1f - DEADZONE);
+        return Math.copySign(Math.min(1f, scaled), v);
+    }
+
+    private static boolean isNeutral(Rcn1cUsbReader.Frame f) {
+        return axis(f.lx) == 0f && axis(f.ly) == 0f
+                && axis(f.rx) == 0f && axis(f.ry) == 0f;
+    }''',
+              s,
+              count=1,
+          )
+          if n != 1: raise SystemExit('axis patch failed')
+
+          p.write_text(s, encoding='utf-8')
+
+          gp = Path('wireless/android-app/build.gradle.kts')
+          g = gp.read_text(encoding='utf-8')
+          g = g.replace('versionCode = 18', 'versionCode = 19')
+          g = g.replace('versionName = "3.3.0-beta6"', 'versionName = "3.3.0-beta7"')
+          gp.write_text(g, encoding='utf-8')
+          PY
+
+      - name: Verify beta7 source guards
+        shell: bash
+        run: |
+          grep -q 'DEADZONE = 0.045f' wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java
+          grep -q 'READY · stick neutri' wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java
+          grep -q 'inputDirty' wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java
+          grep -q 'targetMoved' wireless/android-app/src/com/drone/rcn1cbridge/PortableTouchAccessibilityService.java
+          grep -q 'versionName = "3.3.0-beta7"' wireless/android-app/build.gradle.kts
+
+      - name: Install Android toolchain
+        shell: bash
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Download stable signing key
+        uses: actions/download-artifact@v4
+        with:
+          name: RCN1C-beta2-v2v3-stable
+          run-id: 32875790849
+          github-token: ${{ github.token }}
+          path: stable-key
+
+      - name: Build and sign beta7
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd wireless/android-app
+          gradle --no-daemon clean assembleRelease
+          cd ../..
+          INPUT=$(find wireless/android-app/build/outputs/apk/release -name '*.apk' | head -n1)
+          KEYSTORE=$(find stable-key -name 'RCN1C_Flight_Bridge_signing.keystore' | head -n1)
+          APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+          "$APKSIGNER" sign --ks "$KEYSTORE" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --v2-signing-enabled true --v3-signing-enabled true --out wireless/RCN1C_Bridge.apk "$INPUT"
+          "$APKSIGNER" verify --verbose --print-certs wireless/RCN1C_Bridge.apk | tee /tmp/signing.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' /tmp/signing.txt
+          grep -q 'Verified using v3 scheme (APK Signature Scheme v3): true' /tmp/signing.txt
+          grep -qi '7ff5f60b8917bd6c265a38ab6581a027ca4d571e2a5d4bf7d3e7becd04d131a7' /tmp/signing.txt
+
+      - name: Commit beta7 to main
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/beta7-event-driven-touch.yml
+          git add -A
+          git commit -m 'release(android): RC-N1C Flight Bridge v3.3.0-beta7'
+          git push origin HEAD:main
+
+      - name: Publish beta7 release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v3.3.0-beta7
+          target_commitish: main
+          name: RC-N1C Flight Bridge v3.3.0-beta7
+          prerelease: false
+          make_latest: true
+          body: |
+            Portable Touch is now event-driven. Adds a 4.5% RC deadzone, releases all synthetic fingers when both sticks are neutral, updates gestures only when the target position actually changes, and reduces active movement segments from 32 ms to 16 ms. Keeps beta6 active-window safety gating.
+          files: wireless/RCN1C_Bridge.apk
+
+      - name: Upload beta7 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RCN1C-Flight-Bridge-v3.3.0-beta7-STABLE
+          path: wireless/RCN1C_Bridge.apk
