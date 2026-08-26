@@ -47,6 +47,9 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'SIMULATORE FPV' in main
     assert 'SimulatorActivity.class' in main
 
+    gradle = (ANDROID / 'build.gradle.kts').read_text(encoding='utf-8')
+    assert 'assets.srcDirs("assets")' in gradle
+
     html = (ASSETS / 'index.html').read_text(encoding='utf-8')
     assert '<script src="three.min.js"></script>' in html
     assert '<script src="simulator-bridge.js"></script>' in html
@@ -87,6 +90,11 @@ def test_simulator_bridge_runtime_fails_safe_when_rc_is_absent_or_detached():
         assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [0, 1, 0, 0]);
         window.setRcn1cFrame(32767, -32767, 16384, -16384, 0x0080, 1, 120.0);
         assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [1, 1, 0.500015259254738, 0.500015259254738]);
+        window.setRcn1cFrame(364, 1684, 1024, 1024, 0, 1, 120.0);
+        assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [-1, -1, 0, 0]);
+        assert.deepStrictEqual(window.getRcn1cFlightControls(), {
+          connected: true, yaw: -1, throttle: 1, roll: 0, pitch: 0
+        });
         window.setRcn1cStatus('RC scollegato', false);
         assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [0, 1, 0, 0]);
         assert.deepStrictEqual(events, ['gamepadconnected', 'gamepaddisconnected']);

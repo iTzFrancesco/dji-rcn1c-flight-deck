@@ -26,6 +26,7 @@ TESTS = [
     'test_dashboard_modes.py',
     'test_android_app_surface.py',
     'test_android_simulator.py',
+    'test_fpv_simulator_integration.py',
 ]
 
 fails = 0
