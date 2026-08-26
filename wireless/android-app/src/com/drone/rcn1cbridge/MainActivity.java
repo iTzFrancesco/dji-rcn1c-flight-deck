@@ -248,6 +248,13 @@ public class MainActivity extends Activity {
         goLp.setMargins(0, 0, dp(6), 0);
         headerActions.addView(goBtn, goLp);
 
+        Button simulatorBtn = styledButton("SIMULATORE FPV", 0xFF2B2145, 0xFFB58CFF);
+        simulatorBtn.setTextSize(10);
+        simulatorBtn.setOnClickListener(v -> openSimulator());
+        LinearLayout.LayoutParams simulatorLp = new LinearLayout.LayoutParams(dp(132), dp(44));
+        simulatorLp.setMargins(0, 0, dp(6), 0);
+        headerActions.addView(simulatorBtn, simulatorLp);
+
         settingsBtn = styledButton("\u2699", 0xFF172332, 0xFF2E9DCE);
         settingsBtn.setTextSize(21);
         settingsBtn.setContentDescription("Impostazioni");
@@ -493,6 +500,11 @@ public class MainActivity extends Activity {
         } else {
             startBridge();
         }
+    }
+
+    private void openSimulator() {
+        if (running.get()) stopBridge("Passaggio al simulatore FPV");
+        startActivity(new Intent(this, SimulatorActivity.class));
     }
 
     private void checkForUpdate(boolean showDialog, Button trigger) {

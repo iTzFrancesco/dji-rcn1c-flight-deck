@@ -34,6 +34,12 @@
                 android:resource="@xml/device_filter"/>
         </activity>
 
+        <activity
+            android:name=".SimulatorActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|keyboardHidden"/>
+
         <activity android:name=".UpdateActivity" android:exported="false" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"/>
 
         <provider

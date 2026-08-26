@@ -7,7 +7,7 @@ ANDROID = ROOT / 'wireless' / 'android-app'
 ANDROID_NS = {'android': 'http://schemas.android.com/apk/res/android'}
 
 
-def test_android_app_is_pc_wifi_bridge_only():
+def test_android_app_keeps_pc_wifi_bridge_without_accessibility():
     manifest = ET.parse(ANDROID / 'AndroidManifest.xml').getroot()
     activities = manifest.findall('application/activity')
     launcher = [
@@ -36,5 +36,5 @@ def test_android_app_is_pc_wifi_bridge_only():
 
 
 if __name__ == '__main__':
-    test_android_app_is_pc_wifi_bridge_only()
-    print('[PASS] Android app: solo bridge PC/Wi-Fi e dashboard')
+    test_android_app_keeps_pc_wifi_bridge_without_accessibility()
+    print('[PASS] Android app: bridge PC/Wi-Fi, dashboard e nessuna Accessibility')

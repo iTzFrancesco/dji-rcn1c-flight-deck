@@ -65,6 +65,27 @@ RC-N1C → Android → UDP/Wi-Fi → PC → gamepad virtuale
 
 Il bridge mantiene l'autodiscovery nella rete locale e mostra stick, pulsanti, modalità, pacchetti e RTT. Termux resta supportato come alternativa; vedi [docs/uso-wireless.md](docs/uso-wireless.md).
 
+### Simulatore FPV mobile
+
+La stessa APK include un primo simulatore locale per allenarsi con l'RC-N1C
+anche fuori casa:
+
+```text
+RC-N1C → Rcn1cUsbReader → WebView locale FPV.Sim → scena Acro
+```
+
+Da **SIMULATORE FPV** si apre una scena 3D offline con fisica Acro e input
+diretto del radiocomando. Non usa root, Accessibility Service, touch injection
+o un secondo bridge USB; il percorso PC/Wi-Fi resta disponibile separatamente.
+La base open source e le decisioni tecniche sono descritte in
+[docs/ricerca-simulatori-fpv-mobile.md](docs/ricerca-simulatori-fpv-mobile.md) e
+[docs/adr/0001-simulatore-mobile-webview-locale.md](docs/adr/0001-simulatore-mobile-webview-locale.md).
+
+Il primo test reale va fatto con telefono in orizzontale, RC collegato alla
+porta inferiore tramite adattatore OTG e permesso USB concesso. Il mapping dei
+pulsanti e una scena di allenamento più ricca verranno dopo la validazione
+degli assi e delle prestazioni sull'Oppo A53s.
+
 Per ricostruire l'APK servono JDK 17, Android SDK 34 e Gradle 8.7+.
 
 ## Aggiornamenti

@@ -1,0 +1,1969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPV Racing Simulator - Betaflight Actual Rates</title>
+    <script src="three.min.js"></script>
+    <style>
+        :root {
+            --primary: #2196F3;
+            --accent: #FFC107;
+            --bg-light: #f5f5f5;
+            --surface-light: #ffffff;
+            --text-light: #333333;
+            --bg-dark: #121212;
+            --surface-dark: #1e1e1e;
+            --text-dark: #e0e0e0;
+            --border-radius: 12px;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+            overflow: hidden;
+            display: flex;
+            height: 100vh;
+            background-color: var(--bg-light);
+            color: var(--text-light);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        body.dark-mode {
+            background-color: var(--bg-dark);
+            color: var(--text-dark);
+        }
+
+        /* --- SIDEBAR --- */
+        #sidebar {
+            width: 340px;
+            padding: 20px;
+            background-color: var(--surface-light);
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 20;
+            overflow-y: auto;
+            transition: background-color 0.3s;
+        }
+
+        body.dark-mode #sidebar { background-color: var(--surface-dark); }
+
+        h2 { margin: 0; font-weight: 700; font-size: 1.5rem; }
+        h3 { margin: 0 0 8px 0; font-size: 0.85rem; text-transform: uppercase; color: var(--primary); letter-spacing: 0.5px; }
+
+        .control-group {
+            background: rgba(0,0,0,0.04);
+            padding: 12px;
+            border-radius: var(--border-radius);
+        }
+        body.dark-mode .control-group { background: rgba(255,255,255,0.05); }
+
+        .input-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .input-row label { font-size: 0.8rem; flex: 1; }
+        .input-row input {
+            width: 70px;
+            padding: 6px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: transparent;
+            color: inherit;
+            text-align: right;
+        }
+
+        /* --- BUTTONS --- */
+        button {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: 0.2s;
+            width: 100%;
+            margin-bottom: 5px;
+        }
+        button:hover { filter: brightness(1.1); }
+        
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-secondary { background-color: #607D8B; color: white; }
+        .btn-accent { background-color: var(--accent); color: #333; }
+
+        /* --- CANVAS --- */
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+            background: radial-gradient(circle at center, #e0e0e0 0%, #bdbdbd 100%);
+        }
+        body.dark-mode #canvas-container {
+            background: radial-gradient(circle at center, #2c2c2c 0%, #000000 100%);
+        }
+
+        /* --- MAPPING MODAL --- */
+        #mapping-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 100;
+            display: none; /* Hidden by default */
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background: var(--surface-light);
+            padding: 25px;
+            border-radius: 16px;
+            width: 450px;
+            max-width: 90%;
+            color: var(--text-light);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+        body.dark-mode .modal-content {
+            background: var(--surface-dark);
+            color: var(--text-dark);
+        }
+        
+        .map-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+        }
+        body.dark-mode .map-row { border-bottom: 1px solid rgba(255,255,255,0.1); }
+        
+        .map-label { width: 60px; font-weight: bold; }
+        .map-select { flex: 1; padding: 8px; border-radius: 6px; }
+        .map-invert { display: flex; align-items: center; gap: 5px; font-size: 0.8rem; }
+        .axis-viz {
+            width: 100px;
+            height: 10px;
+            background: #ddd;
+            border-radius: 5px;
+            position: relative;
+            overflow: hidden;
+        }
+        .axis-bar {
+            position: absolute;
+            top: 0; left: 50%;
+            height: 100%;
+            width: 0%; /* Dynamic */
+            background: var(--primary);
+            transition: width 0.05s, left 0.05s;
+        }
+
+        /* --- NOTIFICATIONS --- */
+        #notification-area {
+            position: absolute;
+            top: 20px; right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 200;
+        }
+        .toast {
+            background-color: var(--surface-light);
+            color: var(--text-light);
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-left: 5px solid var(--primary);
+            animation: slideIn 0.3s ease-out;
+        }
+        body.dark-mode .toast { background-color: var(--surface-dark); color: var(--text-dark); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* --- HUD OVERLAY --- */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 14px;
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+            pointer-events: none;
+            z-index: 50;
+        }
+        .hud-row {
+            margin-bottom: 5px;
+            display: flex;
+            gap: 15px;
+        }
+        .hud-label { opacity: 0.7; }
+        .hud-value { font-weight: bold; min-width: 60px; }
+
+        /* --- CRASH OVERLAY --- */
+        #crash-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(180, 0, 0, 0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 80;
+            backdrop-filter: blur(3px);
+        }
+        #crash-overlay h1 {
+            font-size: 4rem;
+            color: white;
+            margin: 0;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
+        }
+        #crash-overlay p {
+            font-size: 1.2rem;
+            color: white;
+            opacity: 0.9;
+        }
+
+        /* --- COUNTDOWN OVERLAY --- */
+        #countdown-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 75;
+            pointer-events: none;
+        }
+        #countdown-text {
+            font-size: 8rem;
+            font-weight: bold;
+            color: white;
+            text-shadow: 4px 4px 10px rgba(0,0,0,0.7);
+        }
+
+        /* --- RACE INFO --- */
+        #race-info {
+            position: absolute;
+            top: 20px;
+            right: 380px;
+            background: rgba(0,0,0,0.6);
+            padding: 15px 20px;
+            border-radius: 10px;
+            color: white;
+            font-family: 'Roboto Mono', monospace;
+            z-index: 50;
+            display: none;
+        }
+        #race-info .time { font-size: 2rem; font-weight: bold; }
+        #race-info .lap-info { font-size: 0.9rem; opacity: 0.8; margin-top: 5px; }
+        #race-info .gate-info { font-size: 1rem; margin-top: 8px; color: #4CAF50; }
+
+        /* --- MODE BUTTONS --- */
+        .mode-btn-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 10px;
+            font-size: 0.85rem;
+        }
+        .mode-btn.active {
+            background-color: var(--accent) !important;
+            color: #333 !important;
+        }
+
+        /* --- KEYBOARD HINTS --- */
+        .key-hints {
+            font-size: 0.75rem;
+            opacity: 0.6;
+            margin-top: 10px;
+            line-height: 1.6;
+        }
+        .key {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <div>
+            <h2>FPV Racing Sim</h2>
+            <p style="font-size: 0.8rem; opacity: 0.7; margin-top:5px;">Betaflight Actual Rates</p>
+        </div>
+
+        <div class="control-group">
+            <h3>Game Mode</h3>
+            <div class="mode-btn-group">
+                <button id="mode-freefly" class="btn-secondary mode-btn active">Free Flight</button>
+                <button id="mode-race" class="btn-secondary mode-btn">Race</button>
+            </div>
+            <div class="key-hints">
+                <span class="key">R</span> Reset &nbsp;
+                <span class="key">Space</span> Start Race<br>
+                <span class="key">Esc</span> Free Flight<br>
+                <span class="key">W</span>/<span class="key">S</span> Camera Tilt
+            </div>
+        </div>
+
+        <button id="open-mapping" class="btn-accent">Configure Controller</button>
+
+        <div class="control-group">
+            <h3>Roll</h3>
+            <div class="input-row"><label>Center Sens</label><input type="number" id="roll-center" value="70"></div>
+            <div class="input-row"><label>Max Rate</label><input type="number" id="roll-max" value="670"></div>
+            <div class="input-row"><label>Expo</label><input type="number" id="roll-expo" value="0.55" step="0.01"></div>
+        </div>
+
+        <div class="control-group">
+            <h3>Pitch</h3>
+            <div class="input-row"><label>Center Sens</label><input type="number" id="pitch-center" value="70"></div>
+            <div class="input-row"><label>Max Rate</label><input type="number" id="pitch-max" value="670"></div>
+            <div class="input-row"><label>Expo</label><input type="number" id="pitch-expo" value="0.55" step="0.01"></div>
+        </div>
+
+        <div class="control-group">
+            <h3>Yaw</h3>
+            <div class="input-row"><label>Center Sens</label><input type="number" id="yaw-center" value="70"></div>
+            <div class="input-row"><label>Max Rate</label><input type="number" id="yaw-max" value="670"></div>
+            <div class="input-row"><label>Expo</label><input type="number" id="yaw-expo" value="0.55" step="0.01"></div>
+        </div>
+
+        <div style="margin-top: auto;">
+            <button id="reset-cam" class="btn-secondary">Reset View</button>
+            <button id="theme-toggle" class="btn-primary">Toggle Dark Mode</button>
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <!-- HUD Overlay -->
+        <div id="hud">
+            <div class="hud-row">
+                <span class="hud-label">Speed:</span>
+                <span class="hud-value" id="hud-speed">0</span>
+                <span>m/s</span>
+            </div>
+            <div class="hud-row">
+                <span class="hud-label">Alt:</span>
+                <span class="hud-value" id="hud-alt">0</span>
+                <span>m</span>
+            </div>
+            <div class="hud-row">
+                <span class="hud-label">Throttle:</span>
+                <span class="hud-value" id="hud-throttle">0</span>
+                <span>%</span>
+            </div>
+            <div class="hud-row">
+                <span class="hud-label">Cam Tilt:</span>
+                <span class="hud-value" id="hud-tilt">15</span>
+                <span>°</span>
+            </div>
+        </div>
+
+        <!-- Race Info Panel -->
+        <div id="race-info">
+            <div class="time" id="race-time">00:00.000</div>
+            <div class="lap-info">Best: <span id="best-lap">--:--</span></div>
+            <div class="gate-info" id="gate-counter">Gate 0 / 0</div>
+        </div>
+
+        <!-- Crash Overlay -->
+        <div id="crash-overlay">
+            <h1>CRASHED!</h1>
+            <p>Press <strong>R</strong> to reset</p>
+        </div>
+
+        <!-- Countdown Overlay -->
+        <div id="countdown-overlay">
+            <div id="countdown-text">3</div>
+        </div>
+    </div>
+
+    <div id="notification-area"></div>
+
+    <div id="mapping-modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 20px;">Controller Mapping</h2>
+            <p style="font-size: 0.9rem; margin-bottom: 20px; opacity: 0.8;">
+                Move your sticks to identify axes. Assign them to the correct functions.
+            </p>
+
+            <div id="mapping-rows"></div>
+
+            <button id="close-mapping" class="btn-primary" style="margin-top: 20px;">Save & Close</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // FPV RACING SIMULATOR - BETAFLIGHT ACTUAL RATES
+        // ============================================================
+
+        // --- 1. STATE & CONFIGURATION ---
+        let config = {
+            mapping: {
+                roll: { axis: 2, invert: false },
+                pitch: { axis: 3, invert: false },
+                yaw: { axis: 0, invert: true },
+                throttle: { axis: 1, invert: true }
+            }
+        };
+
+        // Load saved config
+        const savedConfig = localStorage.getItem('bf_rate_config');
+        if (savedConfig) {
+            try {
+                const parsed = JSON.parse(savedConfig);
+                if (parsed.mapping) config.mapping = parsed.mapping;
+            } catch(e) { console.log('Config load error'); }
+        }
+
+        function saveConfig() {
+            localStorage.setItem('bf_rate_config', JSON.stringify(config));
+        }
+
+        // --- 2. PHYSICS STATE ---
+        const physics = {
+            position: new THREE.Vector3(0, 5, -120),
+            velocity: new THREE.Vector3(0, 0, 0),
+            gravity: 9.81,
+            dragCoeff: 0.4,       // Air resistance
+            maxThrust: 30,        // Max thrust force (gives good power-to-weight)
+            crashed: false,
+            droneRadius: 0.5
+        };
+
+        const spawnPoint = new THREE.Vector3(0, 5, -120);  // Start in clearing in the forest
+
+        // Thrust works like real acro:
+        // - Thrust vector points "up" from the drone's perspective
+        // - Pitch forward = thrust tilts forward = drone accelerates forward
+        // - At hover, ~40% throttle counters gravity
+
+        // --- 3. GAME STATE ---
+        const gameState = {
+            mode: 'freefly',        // 'freefly' | 'countdown' | 'racing' | 'crashed'
+            raceStartTime: 0,
+            currentLapTime: 0,
+            currentGate: 0,
+            totalGates: 0,
+            lapTimes: [],
+            bestLap: null
+        };
+
+        // Load best lap from localStorage
+        const savedBestLap = localStorage.getItem('fpv_best_lap');
+        if (savedBestLap) gameState.bestLap = parseFloat(savedBestLap);
+
+        // --- 3b. MULTIPLAYER STATE ---
+        const multiplayer = {
+            connected: false,
+            playerId: null,
+            playerName: 'Player',
+            socket: null,
+            otherPlayers: new Map(),
+            npcs: [],
+            otherDrones: new Map()  // THREE.js objects for other players/NPCs
+        };
+
+        // Drone colors for other players
+        const playerColors = [0xFF5733, 0x33FF57, 0x3357FF, 0xFF33F5, 0xF5FF33, 0x33FFF5, 0xFF8833, 0x8833FF];
+
+        // Create a simple drone mesh for other players
+        function createOtherDrone(color) {
+            const group = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4, metalness: 0.6 });
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.3), bodyMat);
+            body.castShadow = true;
+            group.add(body);
+
+            // Arms
+            const armMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            const arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 1.5), armMat);
+            arm1.rotation.y = Math.PI / 4;
+            const arm2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 1.5), armMat);
+            arm2.rotation.y = -Math.PI / 4;
+            group.add(arm1);
+            group.add(arm2);
+
+            return group;
+        }
+
+        // Connect to multiplayer server
+        function connectMultiplayer() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}`;
+
+            try {
+                multiplayer.socket = new WebSocket(wsUrl);
+
+                multiplayer.socket.onopen = () => {
+                    multiplayer.connected = true;
+                    showNotification('Connected to server!');
+                };
+
+                multiplayer.socket.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    handleServerMessage(data);
+                };
+
+                multiplayer.socket.onclose = () => {
+                    multiplayer.connected = false;
+                    showNotification('Disconnected from server');
+                    // Try to reconnect after 3 seconds
+                    setTimeout(connectMultiplayer, 3000);
+                };
+
+                multiplayer.socket.onerror = (error) => {
+                    console.log('WebSocket error - running in single player mode');
+                };
+            } catch (e) {
+                console.log('WebSocket not available - single player mode');
+            }
+        }
+
+        function handleServerMessage(data) {
+            switch (data.type) {
+                case 'welcome':
+                    multiplayer.playerId = data.playerId;
+                    multiplayer.playerName = data.playerName;
+                    showNotification(`Welcome ${data.playerName}!`);
+
+                    // Initialize other players
+                    data.players.forEach(p => {
+                        if (p.id !== multiplayer.playerId) {
+                            addOtherPlayer(p);
+                        }
+                    });
+
+                    // Initialize NPCs
+                    data.npcs.forEach(npc => addNPC(npc));
+                    break;
+
+                case 'playerJoined':
+                    addOtherPlayer(data.player);
+                    showNotification(`${data.player.name} joined`);
+                    break;
+
+                case 'playerLeft':
+                    removeOtherPlayer(data.playerId);
+                    break;
+
+                case 'gameState':
+                    // Update other players
+                    data.players.forEach(p => {
+                        if (p.id !== multiplayer.playerId) {
+                            updateOtherPlayer(p);
+                        }
+                    });
+
+                    // Update NPCs
+                    data.npcs.forEach(npc => updateNPC(npc));
+                    break;
+
+                case 'playerCrashed':
+                    // Could add crash effects for other players here
+                    break;
+
+                case 'nameChanged':
+                    const player = multiplayer.otherPlayers.get(data.playerId);
+                    if (player) {
+                        player.name = data.name;
+                    }
+                    break;
+            }
+        }
+
+        function addOtherPlayer(playerData) {
+            multiplayer.otherPlayers.set(playerData.id, playerData);
+            const color = playerColors[playerData.id % playerColors.length];
+            const drone = createOtherDrone(color);
+            drone.position.set(playerData.position.x, playerData.position.y, playerData.position.z);
+            scene.add(drone);
+            multiplayer.otherDrones.set(playerData.id, drone);
+        }
+
+        function removeOtherPlayer(playerId) {
+            multiplayer.otherPlayers.delete(playerId);
+            const drone = multiplayer.otherDrones.get(playerId);
+            if (drone) {
+                scene.remove(drone);
+                multiplayer.otherDrones.delete(playerId);
+            }
+        }
+
+        function updateOtherPlayer(playerData) {
+            const drone = multiplayer.otherDrones.get(playerData.id);
+            if (drone) {
+                // Smooth interpolation
+                drone.position.lerp(
+                    new THREE.Vector3(playerData.position.x, playerData.position.y, playerData.position.z),
+                    0.3
+                );
+                drone.rotation.set(playerData.rotation.x, playerData.rotation.y, playerData.rotation.z);
+                drone.visible = !playerData.crashed;
+            } else if (!playerData.crashed) {
+                addOtherPlayer(playerData);
+            }
+        }
+
+        function addNPC(npcData) {
+            const color = 0x888888;  // Grey for NPCs
+            const drone = createOtherDrone(color);
+            drone.position.set(npcData.position.x, npcData.position.y, npcData.position.z);
+            scene.add(drone);
+            multiplayer.otherDrones.set(npcData.id, drone);
+        }
+
+        function updateNPCDrone(npcData) {
+            let drone = multiplayer.otherDrones.get(npcData.id);
+            if (!drone && !npcData.crashed) {
+                addNPC(npcData);
+                drone = multiplayer.otherDrones.get(npcData.id);
+            }
+            if (drone) {
+                drone.position.lerp(
+                    new THREE.Vector3(npcData.position.x, npcData.position.y, npcData.position.z),
+                    0.3
+                );
+                drone.rotation.set(npcData.rotation.x, npcData.rotation.y, npcData.rotation.z);
+                drone.visible = !npcData.crashed;
+            }
+        }
+
+        function sendPlayerUpdate() {
+            if (multiplayer.socket && multiplayer.socket.readyState === WebSocket.OPEN) {
+                multiplayer.socket.send(JSON.stringify({
+                    type: 'update',
+                    position: {
+                        x: physics.position.x,
+                        y: physics.position.y,
+                        z: physics.position.z
+                    },
+                    rotation: {
+                        x: droneGroup.rotation.x,
+                        y: droneGroup.rotation.y,
+                        z: droneGroup.rotation.z
+                    },
+                    velocity: {
+                        x: physics.velocity.x,
+                        y: physics.velocity.y,
+                        z: physics.velocity.z
+                    },
+                    crashed: physics.crashed
+                }));
+            }
+        }
+
+        // Try to connect when page loads
+        // Offline mobile mode: the local bridge intentionally does not start multiplayer.
+
+        // --- 4. CAMERA CONTROLLER ---
+        const cameraController = {
+            offset: new THREE.Vector3(0, 0.12, 0.35),  // Front of drone, between front props
+            tiltAngle: 15,      // Camera tilt in degrees (positive = tilted up)
+            minTilt: -10,       // Min tilt (looking down)
+            maxTilt: 45,        // Max tilt (looking up, for fast forward flight)
+        };
+
+        // --- 5. THEME & UI ---
+        const body = document.body;
+        const themeBtn = document.getElementById('theme-toggle');
+
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            body.classList.add('dark-mode');
+        }
+        themeBtn.addEventListener('click', () => body.classList.toggle('dark-mode'));
+
+        function showNotification(msg) {
+            const area = document.getElementById('notification-area');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerText = msg;
+            area.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+
+        // --- 6. THREE.JS SCENE SETUP ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+
+        // Create sky dome for static background
+        const skyGeometry = new THREE.SphereGeometry(500, 32, 32);
+        const skyCanvas = document.createElement('canvas');
+        skyCanvas.width = 1024;
+        skyCanvas.height = 1024;
+        const skyCtx = skyCanvas.getContext('2d');
+
+        // Gradient from top to bottom
+        const skyGradient = skyCtx.createLinearGradient(0, 0, 0, 1024);
+        skyGradient.addColorStop(0, '#1565C0');      // Deep blue at top
+        skyGradient.addColorStop(0.15, '#1976D2');   // Royal blue
+        skyGradient.addColorStop(0.3, '#42A5F5');    // Light blue
+        skyGradient.addColorStop(0.5, '#64B5F6');    // Sky blue
+        skyGradient.addColorStop(0.7, '#90CAF9');    // Powder blue
+        skyGradient.addColorStop(0.85, '#BBDEFB');   // Very light blue
+        skyGradient.addColorStop(1, '#E3F2FD');      // Almost white at horizon
+        skyCtx.fillStyle = skyGradient;
+        skyCtx.fillRect(0, 0, 1024, 1024);
+
+        const skyTexture = new THREE.CanvasTexture(skyCanvas);
+        const skyMaterial = new THREE.MeshBasicMaterial({
+            map: skyTexture,
+            side: THREE.BackSide
+        });
+        const skyDome = new THREE.Mesh(skyGeometry, skyMaterial);
+        scene.add(skyDome);
+
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0xBBDEFB, 150, 500);
+
+        const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.set(0, 5, -120);
+
+        const mobileProfile = /Android/i.test(navigator.userAgent);
+        const renderer = new THREE.WebGLRenderer({
+            antialias: !mobileProfile,
+            powerPreference: 'low-power'
+        });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(mobileProfile ? 1 : Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = !mobileProfile;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        container.appendChild(renderer.domElement);
+
+        // Lighting - Ambient
+        const ambientLight = new THREE.AmbientLight(0x87CEEB, 0.4);
+        scene.add(ambientLight);
+
+        // Hemisphere light for natural sky/ground lighting
+        const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x3d8c40, 0.3);
+        scene.add(hemiLight);
+
+        // Sun light (directional)
+        const sunLight = new THREE.DirectionalLight(0xfffaf0, 1.2);
+        sunLight.position.set(100, 150, 80);
+        sunLight.castShadow = !mobileProfile;
+        sunLight.shadow.mapSize.width = mobileProfile ? 512 : 4096;
+        sunLight.shadow.mapSize.height = mobileProfile ? 512 : 4096;
+        sunLight.shadow.camera.near = 10;
+        sunLight.shadow.camera.far = 500;
+        sunLight.shadow.camera.left = -150;
+        sunLight.shadow.camera.right = 150;
+        sunLight.shadow.camera.top = 150;
+        sunLight.shadow.camera.bottom = -150;
+        scene.add(sunLight);
+
+        // Visible Sun sphere
+        const sunGeom = new THREE.SphereGeometry(15, 32, 32);
+        const sunMat = new THREE.MeshBasicMaterial({
+            color: 0xffff80,
+            transparent: true,
+            opacity: 0.95
+        });
+        const sunMesh = new THREE.Mesh(sunGeom, sunMat);
+        sunMesh.position.set(100, 150, 80);
+        scene.add(sunMesh);
+
+        // Sun glow
+        const sunGlowGeom = new THREE.SphereGeometry(25, 32, 32);
+        const sunGlowMat = new THREE.MeshBasicMaterial({
+            color: 0xffffcc,
+            transparent: true,
+            opacity: 0.3
+        });
+        const sunGlow = new THREE.Mesh(sunGlowGeom, sunGlowMat);
+        sunGlow.position.copy(sunMesh.position);
+        scene.add(sunGlow);
+
+        // --- 7. GROUND PLANE WITH CONCRETE TEXTURE ---
+        const groundSize = 400;
+
+        // Create procedural concrete/asphalt texture
+        const groundCanvas = document.createElement('canvas');
+        groundCanvas.width = 512;
+        groundCanvas.height = 512;
+        const groundCtx = groundCanvas.getContext('2d');
+
+        // Base concrete grey
+        groundCtx.fillStyle = '#6a6a6a';
+        groundCtx.fillRect(0, 0, 512, 512);
+
+        // Add concrete variation
+        for (let i = 0; i < 8000; i++) {
+            const x = Math.random() * 512;
+            const y = Math.random() * 512;
+            const shade = Math.floor(90 + Math.random() * 40);
+            groundCtx.fillStyle = `rgb(${shade}, ${shade}, ${shade + Math.random() * 10})`;
+            groundCtx.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+        }
+
+        // Add some darker patches (oil stains)
+        for (let i = 0; i < 40; i++) {
+            const x = Math.random() * 512;
+            const y = Math.random() * 512;
+            groundCtx.fillStyle = 'rgba(40, 40, 45, 0.3)';
+            groundCtx.beginPath();
+            groundCtx.arc(x, y, 5 + Math.random() * 15, 0, Math.PI * 2);
+            groundCtx.fill();
+        }
+
+        // Add grid lines (like concrete slabs)
+        groundCtx.strokeStyle = 'rgba(80, 80, 85, 0.4)';
+        groundCtx.lineWidth = 2;
+        for (let i = 0; i < 512; i += 64) {
+            groundCtx.beginPath();
+            groundCtx.moveTo(i, 0);
+            groundCtx.lineTo(i, 512);
+            groundCtx.stroke();
+            groundCtx.beginPath();
+            groundCtx.moveTo(0, i);
+            groundCtx.lineTo(512, i);
+            groundCtx.stroke();
+        }
+
+        const groundTexture = new THREE.CanvasTexture(groundCanvas);
+        groundTexture.wrapS = THREE.RepeatWrapping;
+        groundTexture.wrapT = THREE.RepeatWrapping;
+        groundTexture.repeat.set(40, 40);
+
+        const groundGeom = new THREE.PlaneGeometry(groundSize, groundSize);
+        const groundMat = new THREE.MeshStandardMaterial({
+            map: groundTexture,
+            roughness: 0.9
+        });
+        const ground = new THREE.Mesh(groundGeom, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = 0;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // --- 8. DRONE MODEL ---
+        const droneGroup = new THREE.Group();
+        const propellers = [];
+
+        // Body
+        const matBody = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.6 });
+        const matArm = new THREE.MeshStandardMaterial({ color: 0x2196F3, roughness: 0.5, metalness: 0.3 });
+        const matProp = new THREE.MeshStandardMaterial({ color: 0xdddddd, transparent: true, opacity: 0.6 });
+
+        const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.3), matBody);
+        bodyMesh.castShadow = true;
+        droneGroup.add(bodyMesh);
+
+        // Arms (X shape)
+        const arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 1.8), matArm);
+        arm1.rotation.y = Math.PI / 4;
+        arm1.castShadow = true;
+        const arm2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 1.8), matArm);
+        arm2.rotation.y = -Math.PI / 4;
+        arm2.castShadow = true;
+        droneGroup.add(arm1);
+        droneGroup.add(arm2);
+
+        // Propellers
+        const propPositions = [
+            { x: -0.6, z: 0.6 }, { x: 0.6, z: -0.6 },
+            { x: 0.6, z: 0.6 }, { x: -0.6, z: -0.6 }
+        ];
+        propPositions.forEach((pos, i) => {
+            const prop = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.02, 16), matProp);
+            prop.position.set(pos.x, 0.08, pos.z);
+            propellers.push(prop);
+            droneGroup.add(prop);
+        });
+
+        droneGroup.position.copy(physics.position);
+        scene.add(droneGroup);
+
+        // --- 9. GATES REMOVED - FREE FLIGHT MODE ---
+        const gates = [];  // Empty for compatibility
+
+        // --- 10. BLOCKY WORLD ENVIRONMENT ---
+        const buildings = [];
+        const trees = [];  // Empty - no trees in blocky world
+
+        // Vibrant primary color palette (Slow Roads style)
+        const blockColors = {
+            red: 0xE53935,
+            blue: 0x1E88E5,
+            yellow: 0xFDD835,
+            green: 0x43A047,
+            orange: 0xFB8C00,
+            purple: 0x8E24AA,
+            cyan: 0x00ACC1,
+            pink: 0xD81B60,
+            white: 0xF5F5F5,
+            darkGrey: 0x424242
+        };
+
+        const colorValues = Object.values(blockColors);
+        function randomBlockColor() {
+            return colorValues[Math.floor(Math.random() * (colorValues.length - 2))]; // Exclude white/grey
+        }
+
+        // Glass material for skyscrapers
+        const glassMat = new THREE.MeshStandardMaterial({
+            color: 0x88DDFF,
+            roughness: 0.05,
+            metalness: 0.95,
+            transparent: true,
+            opacity: 0.7
+        });
+
+        // --- 10a. RED BOUNDARY WALLS ---
+        const boundaryMat = new THREE.MeshStandardMaterial({
+            color: 0xFF0000,
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.DoubleSide
+        });
+
+        const boundaryHeight = 100;
+        const boundarySize = groundSize / 2 - 5;
+
+        // Create 4 boundary walls
+        const boundaryWalls = [];
+
+        // North wall (+Z)
+        const northWall = new THREE.Mesh(
+            new THREE.PlaneGeometry(groundSize, boundaryHeight),
+            boundaryMat
+        );
+        northWall.position.set(0, boundaryHeight / 2, boundarySize);
+        scene.add(northWall);
+        boundaryWalls.push({ axis: 'z', value: boundarySize, normal: -1 });
+
+        // South wall (-Z)
+        const southWall = new THREE.Mesh(
+            new THREE.PlaneGeometry(groundSize, boundaryHeight),
+            boundaryMat
+        );
+        southWall.position.set(0, boundaryHeight / 2, -boundarySize);
+        southWall.rotation.y = Math.PI;
+        scene.add(southWall);
+        boundaryWalls.push({ axis: 'z', value: -boundarySize, normal: 1 });
+
+        // East wall (+X)
+        const eastWall = new THREE.Mesh(
+            new THREE.PlaneGeometry(groundSize, boundaryHeight),
+            boundaryMat
+        );
+        eastWall.position.set(boundarySize, boundaryHeight / 2, 0);
+        eastWall.rotation.y = -Math.PI / 2;
+        scene.add(eastWall);
+        boundaryWalls.push({ axis: 'x', value: boundarySize, normal: -1 });
+
+        // West wall (-X)
+        const westWall = new THREE.Mesh(
+            new THREE.PlaneGeometry(groundSize, boundaryHeight),
+            boundaryMat
+        );
+        westWall.position.set(-boundarySize, boundaryHeight / 2, 0);
+        westWall.rotation.y = Math.PI / 2;
+        scene.add(westWall);
+        boundaryWalls.push({ axis: 'x', value: -boundarySize, normal: 1 });
+
+        // Boundary collision check
+        function checkBoundaryCollision() {
+            const margin = 2;
+            if (Math.abs(physics.position.x) > boundarySize - margin ||
+                Math.abs(physics.position.z) > boundarySize - margin) {
+                return true;
+            }
+            return false;
+        }
+
+        // --- 10b. BLOCKY BUILDINGS ---
+
+        // Create a simple blocky building
+        function createBlockyBuilding(x, z, width, depth, height, color) {
+            const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+            const building = new THREE.Mesh(
+                new THREE.BoxGeometry(width, height, depth),
+                mat
+            );
+            building.position.set(x, height / 2, z);
+            building.castShadow = true;
+            building.receiveShadow = true;
+            scene.add(building);
+
+            buildings.push({
+                position: new THREE.Vector3(x, 0, z),
+                width: width,
+                depth: depth,
+                height: height
+            });
+
+            return building;
+        }
+
+        // Create building with fly-through gap
+        function createBuildingWithGap(x, z, width, depth, height, gapHeight, gapStart, color) {
+            const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+
+            // Bottom section
+            if (gapStart > 0) {
+                const bottom = new THREE.Mesh(
+                    new THREE.BoxGeometry(width, gapStart, depth),
+                    mat
+                );
+                bottom.position.set(x, gapStart / 2, z);
+                bottom.castShadow = true;
+                scene.add(bottom);
+            }
+
+            // Top section
+            const topHeight = height - gapStart - gapHeight;
+            if (topHeight > 0) {
+                const top = new THREE.Mesh(
+                    new THREE.BoxGeometry(width, topHeight, depth),
+                    mat
+                );
+                top.position.set(x, gapStart + gapHeight + topHeight / 2, z);
+                top.castShadow = true;
+                scene.add(top);
+            }
+
+            // Add collision for bottom and top (not gap)
+            if (gapStart > 0) {
+                buildings.push({
+                    position: new THREE.Vector3(x, 0, z),
+                    width: width, depth: depth, height: gapStart
+                });
+            }
+            buildings.push({
+                position: new THREE.Vector3(x, gapStart + gapHeight, z),
+                width: width, depth: depth, height: topHeight,
+                baseY: gapStart + gapHeight
+            });
+        }
+
+        // Create glass skyscraper with many floors
+        function createSkyscraper(x, z, width, depth, floors) {
+            const floorHeight = 4;
+            const totalHeight = floors * floorHeight;
+            const group = new THREE.Group();
+
+            // Main glass structure
+            const glassMaterial = new THREE.MeshStandardMaterial({
+                color: 0x88DDFF,
+                roughness: 0.05,
+                metalness: 0.9,
+                transparent: true,
+                opacity: 0.6
+            });
+
+            // Core structure
+            const core = new THREE.Mesh(
+                new THREE.BoxGeometry(width * 0.3, totalHeight, depth * 0.3),
+                new THREE.MeshStandardMaterial({ color: 0x333333 })
+            );
+            core.position.y = totalHeight / 2;
+            group.add(core);
+
+            // Glass floors
+            for (let i = 0; i < floors; i++) {
+                const floorY = i * floorHeight + floorHeight / 2;
+
+                // Glass panels on each side
+                const panelMat = new THREE.MeshStandardMaterial({
+                    color: i % 2 === 0 ? 0x88DDFF : 0x66BBDD,
+                    roughness: 0.05,
+                    metalness: 0.95,
+                    transparent: true,
+                    opacity: 0.7
+                });
+
+                // Front and back panels
+                for (let side of [-1, 1]) {
+                    const panel = new THREE.Mesh(
+                        new THREE.BoxGeometry(width, floorHeight - 0.5, 0.2),
+                        panelMat
+                    );
+                    panel.position.set(0, floorY, side * depth / 2);
+                    group.add(panel);
+                }
+
+                // Left and right panels
+                for (let side of [-1, 1]) {
+                    const panel = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.2, floorHeight - 0.5, depth),
+                        panelMat
+                    );
+                    panel.position.set(side * width / 2, floorY, 0);
+                    group.add(panel);
+                }
+
+                // Floor slab
+                const slab = new THREE.Mesh(
+                    new THREE.BoxGeometry(width, 0.3, depth),
+                    new THREE.MeshStandardMaterial({ color: 0x555555 })
+                );
+                slab.position.y = i * floorHeight;
+                group.add(slab);
+            }
+
+            // Roof
+            const roof = new THREE.Mesh(
+                new THREE.BoxGeometry(width + 2, 1, depth + 2),
+                new THREE.MeshStandardMaterial({ color: 0x444444 })
+            );
+            roof.position.y = totalHeight;
+            group.add(roof);
+
+            // Antenna
+            const antenna = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.3, 0.3, 15, 8),
+                new THREE.MeshStandardMaterial({ color: 0xCC0000 })
+            );
+            antenna.position.y = totalHeight + 8;
+            group.add(antenna);
+
+            group.position.set(x, 0, z);
+            scene.add(group);
+
+            buildings.push({
+                position: new THREE.Vector3(x, 0, z),
+                width: width,
+                depth: depth,
+                height: totalHeight + 15
+            });
+        }
+
+        // Create blocky terrain ramp to fly under
+        function createRamp(x, z, width, length, height, rotation, color) {
+            const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.9 });
+            const ramp = new THREE.Mesh(
+                new THREE.BoxGeometry(width, height, length),
+                mat
+            );
+            ramp.position.set(x, height / 2, z);
+            ramp.rotation.x = rotation;
+            ramp.castShadow = true;
+            scene.add(ramp);
+        }
+
+        // Create arch to fly through
+        function createArch(x, z, width, height, depth, color) {
+            const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+
+            // Left pillar
+            const leftPillar = new THREE.Mesh(
+                new THREE.BoxGeometry(3, height, depth),
+                mat
+            );
+            leftPillar.position.set(x - width / 2 + 1.5, height / 2, z);
+            leftPillar.castShadow = true;
+            scene.add(leftPillar);
+
+            // Right pillar
+            const rightPillar = new THREE.Mesh(
+                new THREE.BoxGeometry(3, height, depth),
+                mat
+            );
+            rightPillar.position.set(x + width / 2 - 1.5, height / 2, z);
+            rightPillar.castShadow = true;
+            scene.add(rightPillar);
+
+            // Top beam
+            const topBeam = new THREE.Mesh(
+                new THREE.BoxGeometry(width, 3, depth),
+                mat
+            );
+            topBeam.position.set(x, height - 1.5, z);
+            topBeam.castShadow = true;
+            scene.add(topBeam);
+
+            // Collision for pillars
+            buildings.push({
+                position: new THREE.Vector3(x - width / 2 + 1.5, 0, z),
+                width: 3, depth: depth, height: height
+            });
+            buildings.push({
+                position: new THREE.Vector3(x + width / 2 - 1.5, 0, z),
+                width: 3, depth: depth, height: height
+            });
+        }
+
+        // === GENERATE BLOCKY CITY ===
+
+        // Central plaza - open area for spawn
+        // Spawn is at (0, 5, -120), keep that area clear
+
+        // Skyscrapers (tall glass buildings)
+        createSkyscraper(0, 50, 20, 20, 40);      // 160m tall central tower
+        createSkyscraper(-60, 30, 15, 15, 30);   // 120m
+        createSkyscraper(70, 40, 18, 18, 35);    // 140m
+        createSkyscraper(-80, -50, 12, 12, 25);  // 100m
+        createSkyscraper(90, -30, 14, 14, 28);   // 112m
+
+        // Colorful blocky buildings - various sizes
+        createBlockyBuilding(-40, -20, 15, 15, 25, blockColors.red);
+        createBlockyBuilding(30, -40, 20, 12, 18, blockColors.blue);
+        createBlockyBuilding(-25, 80, 18, 18, 30, blockColors.yellow);
+        createBlockyBuilding(50, 70, 12, 20, 22, blockColors.green);
+        createBlockyBuilding(-70, 60, 25, 15, 35, blockColors.orange);
+        createBlockyBuilding(100, 80, 16, 16, 28, blockColors.purple);
+        createBlockyBuilding(-100, 20, 14, 22, 20, blockColors.cyan);
+        createBlockyBuilding(40, 100, 20, 20, 40, blockColors.pink);
+
+        // Buildings with fly-through gaps
+        createBuildingWithGap(-30, 40, 25, 8, 35, 8, 10, blockColors.red);
+        createBuildingWithGap(60, -70, 20, 10, 40, 10, 15, blockColors.blue);
+        createBuildingWithGap(-80, -80, 30, 8, 45, 12, 8, blockColors.yellow);
+        createBuildingWithGap(20, 60, 15, 12, 30, 8, 12, blockColors.green);
+
+        // Arches to fly through
+        createArch(0, -60, 20, 25, 5, blockColors.orange);
+        createArch(-50, 0, 25, 30, 5, blockColors.purple);
+        createArch(80, 20, 18, 22, 5, blockColors.cyan);
+
+        // Low blocky terrain/platforms to fly under
+        createBlockyBuilding(0, 0, 40, 40, 8, blockColors.darkGrey);  // Central platform
+        createBlockyBuilding(-100, -100, 30, 30, 6, blockColors.green);
+        createBlockyBuilding(100, -100, 25, 35, 7, blockColors.blue);
+        createBlockyBuilding(-100, 100, 35, 25, 5, blockColors.red);
+        createBlockyBuilding(100, 100, 28, 28, 9, blockColors.yellow);
+
+        // Scattered smaller blocks for obstacles
+        for (let i = 0; i < 30; i++) {
+            const x = (Math.random() - 0.5) * 300;
+            const z = (Math.random() - 0.5) * 300;
+
+            // Skip spawn area
+            if (Math.abs(x) < 30 && z < -90 && z > -150) continue;
+
+            const width = 5 + Math.random() * 10;
+            const depth = 5 + Math.random() * 10;
+            const height = 8 + Math.random() * 25;
+            const color = randomBlockColor();
+
+            createBlockyBuilding(x, z, width, depth, height, color);
+        }
+
+        // Dummy function for compatibility (no train)
+        function updateTrain(dt) { }
+        function checkTrainCollision() { return false; }
+
+        // --- 10c. VARIED CLOUDS ---
+        const clouds = [];
+
+        function createCloud(x, y, z, type = 'normal') {
+            const cloudGroup = new THREE.Group();
+            const cloudMat = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: type === 'wispy' ? 0.6 : 0.85,
+                roughness: 1
+            });
+
+            let numPuffs, puffSize, spread;
+
+            let vertical = 1;
+
+            // Optimized cloud puff counts for performance
+            switch(type) {
+                case 'large':
+                    numPuffs = 5 + Math.floor(Math.random() * 3);
+                    puffSize = 18;
+                    spread = 45;
+                    break;
+                case 'wispy':
+                    numPuffs = 2 + Math.floor(Math.random() * 2);
+                    puffSize = 8;
+                    spread = 35;
+                    cloudMat.opacity = 0.5;
+                    break;
+                case 'puffy':
+                    numPuffs = 3 + Math.floor(Math.random() * 2);
+                    puffSize = 16;
+                    spread = 20;
+                    break;
+                default:
+                    numPuffs = 3 + Math.floor(Math.random() * 3);
+                    puffSize = 12;
+                    spread = 25;
+            }
+
+            for (let i = 0; i < numPuffs; i++) {
+                const size = puffSize * (0.5 + Math.random());
+                const puff = new THREE.Mesh(
+                    new THREE.SphereGeometry(size, 8, 6),
+                    cloudMat
+                );
+                puff.position.set(
+                    (Math.random() - 0.5) * spread,
+                    (Math.random() - 0.5) * (puffSize * vertical),
+                    (Math.random() - 0.5) * (spread * 0.5)
+                );
+                puff.scale.y = (0.5 + Math.random() * 0.3) * (vertical > 1 ? 1.5 : 1);
+                cloudGroup.add(puff);
+            }
+
+            cloudGroup.position.set(x, y, z);
+
+            const cloudData = {
+                group: cloudGroup,
+                baseY: y,
+                speedX: (Math.random() - 0.5) * 0.3,      // Very slow drift
+                speedZ: (Math.random() - 0.5) * 0.15,     // Very slow drift
+                bobSpeed: 0.05 + Math.random() * 0.05,    // Gentle bob
+                bobAmount: 0.3 + Math.random() * 0.5,     // Subtle movement
+                phase: Math.random() * Math.PI * 2,
+                rotationSpeed: (Math.random() - 0.5) * 0.002  // Almost no rotation
+            };
+
+            scene.add(cloudGroup);
+            return cloudData;
+        }
+
+        // Minimal cloud coverage (~20 clouds total)
+        // Normal fluffy clouds - 8 clouds
+        for (let i = 0; i < 8; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 1.5;
+            const y = 80 + Math.random() * 40;
+            const z = (Math.random() - 0.5) * groundSize * 1.5;
+            clouds.push(createCloud(x, y, z, 'normal'));
+        }
+        // Large cumulus clouds - 5 clouds
+        for (let i = 0; i < 5; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 1.5;
+            const y = 100 + Math.random() * 40;
+            const z = (Math.random() - 0.5) * groundSize * 1.5;
+            clouds.push(createCloud(x, y, z, 'large'));
+        }
+        // Wispy clouds - 7 clouds
+        for (let i = 0; i < 7; i++) {
+            const x = (Math.random() - 0.5) * groundSize * 2;
+            const y = 110 + Math.random() * 30;
+            const z = (Math.random() - 0.5) * groundSize * 2;
+            clouds.push(createCloud(x, y, z, 'wispy'));
+        }
+
+        // Cloud update function
+        function updateClouds(dt) {
+            const time = performance.now() * 0.001;
+            clouds.forEach(cloud => {
+                cloud.group.position.x += cloud.speedX * dt;
+                cloud.group.position.z += cloud.speedZ * dt;
+                cloud.group.position.y = cloud.baseY + Math.sin(time * cloud.bobSpeed + cloud.phase) * cloud.bobAmount;
+                cloud.group.rotation.y += cloud.rotationSpeed * dt;
+
+                const limit = groundSize * 1.2;
+                if (cloud.group.position.x > limit) cloud.group.position.x = -limit;
+                if (cloud.group.position.x < -limit) cloud.group.position.x = limit;
+                if (cloud.group.position.z > limit) cloud.group.position.z = -limit;
+                if (cloud.group.position.z < -limit) cloud.group.position.z = limit;
+            });
+        }
+
+        // --- 10g. START/FINISH BANNER ---
+        const bannerPoleGeom = new THREE.CylinderGeometry(0.2, 0.2, 8, 8);
+        const bannerPoleMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF });
+
+        const leftBannerPole = new THREE.Mesh(bannerPoleGeom, bannerPoleMat);
+        leftBannerPole.position.set(-8, 4, 5);
+        leftBannerPole.castShadow = true;
+        scene.add(leftBannerPole);
+
+        const rightBannerPole = new THREE.Mesh(bannerPoleGeom, bannerPoleMat);
+        rightBannerPole.position.set(8, 4, 5);
+        rightBannerPole.castShadow = true;
+        scene.add(rightBannerPole);
+
+        // --- 11. COLLISION DETECTION ---
+        function checkBuildingCollision() {
+            for (const building of buildings) {
+                const dx = physics.position.x - building.position.x;
+                const dz = physics.position.z - building.position.z;
+
+                // Check if within building's bounding box
+                if (Math.abs(dx) < building.width / 2 + physics.droneRadius &&
+                    Math.abs(dz) < building.depth / 2 + physics.droneRadius &&
+                    physics.position.y < building.height) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function checkTreeCollision() {
+            return false;  // No trees in blocky world
+        }
+
+        function checkGroundCollision() {
+            const groundLevel = 0;
+            if (physics.position.y < groundLevel + physics.droneRadius) {
+                const impactSpeed = Math.abs(physics.velocity.y);
+                if (impactSpeed > 3) {
+                    return true; // Crash
+                }
+                // Soft landing - just stop
+                physics.position.y = groundLevel + physics.droneRadius;
+                physics.velocity.y = Math.max(0, physics.velocity.y);
+            }
+            return false;
+        }
+
+        function checkGatePass() {
+            if (gameState.mode !== 'racing') return;
+
+            const nextGateIndex = gameState.currentGate;
+            if (nextGateIndex >= gates.length) return;
+
+            const gate = gates[nextGateIndex];
+            const dronePos = physics.position;
+
+            // Check if drone is near the gate plane
+            const toGate = new THREE.Vector3().subVectors(dronePos, gate.position);
+            const distAlongForward = toGate.dot(gate.forward);
+
+            // Check if crossed the gate plane (from front to back)
+            if (Math.abs(distAlongForward) < 2) {
+                const lateralDist = Math.sqrt(
+                    Math.pow(toGate.x - distAlongForward * gate.forward.x, 2) +
+                    Math.pow(toGate.z - distAlongForward * gate.forward.z, 2)
+                );
+                const heightFromGate = dronePos.y - gate.position.y;
+
+                // Check if within gate bounds
+                if (lateralDist < gate.width / 2 &&
+                    Math.abs(heightFromGate) < gate.height / 2) {
+
+                    // Gate passed!
+                    gate.passed = true;
+                    gate.poles.forEach(pole => pole.material = gate.passedMat);
+                    gameState.currentGate++;
+
+                    updateGateCounter();
+
+                    if (gameState.currentGate >= gates.length) {
+                        // Lap complete!
+                        completeLap();
+                    } else {
+                        showNotification(`Gate ${nextGateIndex + 1} cleared!`);
+                    }
+                }
+            }
+        }
+
+        function checkGateCollision() {
+            // Simplified: check collision with gate poles
+            for (const gate of gates) {
+                const dx = physics.position.x - gate.position.x;
+                const dy = physics.position.y - gate.position.y;
+                const dz = physics.position.z - gate.position.z;
+
+                // Only check if near the gate
+                if (Math.abs(dx) > 5 || Math.abs(dz) > 5) continue;
+
+                // Check pole collision (simplified bounding boxes)
+                const poleRadius = 0.3;
+                const halfWidth = gate.width / 2;
+
+                // Transform drone position to gate local space
+                const cosR = Math.cos(-gate.group.rotation.y);
+                const sinR = Math.sin(-gate.group.rotation.y);
+                const localX = dx * cosR - dz * sinR;
+                const localZ = dx * sinR + dz * cosR;
+
+                // Check left pole
+                if (Math.abs(localX + halfWidth) < poleRadius + physics.droneRadius &&
+                    Math.abs(localZ) < poleRadius + physics.droneRadius &&
+                    dy > 0 && dy < gate.height) {
+                    return true;
+                }
+                // Check right pole
+                if (Math.abs(localX - halfWidth) < poleRadius + physics.droneRadius &&
+                    Math.abs(localZ) < poleRadius + physics.droneRadius &&
+                    dy > 0 && dy < gate.height) {
+                    return true;
+                }
+                // Check top bar
+                if (Math.abs(dy - gate.height) < poleRadius + physics.droneRadius &&
+                    Math.abs(localZ) < poleRadius + physics.droneRadius &&
+                    Math.abs(localX) < halfWidth) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // --- 12. GAME FLOW ---
+        function triggerCrash() {
+            physics.crashed = true;
+            physics.velocity.set(0, 0, 0);
+            gameState.mode = 'crashed';
+            document.getElementById('crash-overlay').style.display = 'flex';
+            showNotification('Crashed! Press R to reset');
+        }
+
+        function resetDrone() {
+            physics.position.copy(spawnPoint);
+            physics.velocity.set(0, 0, 0);
+            physics.crashed = false;
+            droneGroup.rotation.set(0, 0, 0);
+            droneGroup.position.copy(spawnPoint);
+
+            document.getElementById('crash-overlay').style.display = 'none';
+
+            if (gameState.mode === 'crashed' || gameState.mode === 'racing') {
+                gameState.mode = 'freefly';
+                gameState.currentGate = 0;
+                document.getElementById('race-info').style.display = 'none';
+
+                // Reset gate colors
+                gates.forEach(gate => {
+                    gate.passed = false;
+                    gate.poles.forEach(pole => pole.material = gate.poleMat);
+                });
+            }
+
+            showNotification('Drone reset');
+        }
+
+        function startRace() {
+            if (gameState.mode !== 'freefly') return;
+
+            resetDrone();
+            gameState.mode = 'countdown';
+
+            const countdownOverlay = document.getElementById('countdown-overlay');
+            const countdownText = document.getElementById('countdown-text');
+            countdownOverlay.style.display = 'flex';
+
+            let count = 3;
+            countdownText.textContent = count;
+
+            const countdownInterval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownText.textContent = count;
+                } else if (count === 0) {
+                    countdownText.textContent = 'GO!';
+                } else {
+                    clearInterval(countdownInterval);
+                    countdownOverlay.style.display = 'none';
+                    gameState.mode = 'racing';
+                    gameState.raceStartTime = performance.now();
+                    gameState.currentGate = 0;
+                    document.getElementById('race-info').style.display = 'block';
+                    updateGateCounter();
+                }
+            }, 1000);
+        }
+
+        function completeLap() {
+            const lapTime = (performance.now() - gameState.raceStartTime) / 1000;
+            gameState.lapTimes.push(lapTime);
+
+            if (!gameState.bestLap || lapTime < gameState.bestLap) {
+                gameState.bestLap = lapTime;
+                localStorage.setItem('fpv_best_lap', lapTime.toString());
+                showNotification(`New best lap: ${formatTime(lapTime)}!`);
+            } else {
+                showNotification(`Lap complete: ${formatTime(lapTime)}`);
+            }
+
+            // Reset for next lap
+            gameState.mode = 'freefly';
+            gameState.currentGate = 0;
+            document.getElementById('race-info').style.display = 'none';
+
+            gates.forEach(gate => {
+                gate.passed = false;
+                gate.poles.forEach(pole => pole.material = gate.poleMat);
+            });
+
+            updateBestLap();
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds % 1) * 1000);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+        }
+
+        function updateGateCounter() {
+            document.getElementById('gate-counter').textContent =
+                `Gate ${gameState.currentGate} / ${gameState.totalGates}`;
+        }
+
+        function updateBestLap() {
+            const bestLapEl = document.getElementById('best-lap');
+            bestLapEl.textContent = gameState.bestLap ? formatTime(gameState.bestLap) : '--:--';
+        }
+
+        // --- 13. BETAFLIGHT ACTUAL RATES ---
+        function calculateActualRate(input, centerSens, maxRate, expo) {
+            const deflection = Math.abs(input);
+            if (deflection < 0.02) return 0;
+
+            const s = centerSens;
+            const m = maxRate;
+            const e = expo;
+
+            const curve = Math.pow(deflection, 1 + (e * 3));
+            const rateMag = s + (m - s) * curve;
+
+            return (deflection * rateMag) * Math.sign(input);
+        }
+
+        // --- 14. PHYSICS UPDATE ---
+        function updatePhysics(dt, rawRoll, rawPitch, rawYaw, rawThrottle) {
+            if (physics.crashed) return;
+
+            // Clamp dt to prevent explosion on tab switch
+            dt = Math.min(dt, 0.05);
+
+            // Get rate values from UI
+            const rC = parseFloat(document.getElementById('roll-center').value);
+            const rM = parseFloat(document.getElementById('roll-max').value);
+            const rE = parseFloat(document.getElementById('roll-expo').value);
+            const pC = parseFloat(document.getElementById('pitch-center').value);
+            const pM = parseFloat(document.getElementById('pitch-max').value);
+            const pE = parseFloat(document.getElementById('pitch-expo').value);
+            const yC = parseFloat(document.getElementById('yaw-center').value);
+            const yM = parseFloat(document.getElementById('yaw-max').value);
+            const yE = parseFloat(document.getElementById('yaw-expo').value);
+
+            // Calculate rotation rates
+            const rollRate = calculateActualRate(rawRoll, rC, rM, rE);
+            const pitchRate = calculateActualRate(rawPitch, pC, pM, pE);
+            const yawRate = calculateActualRate(rawYaw, yC, yM, yE);
+
+            // Apply rotations (in drone's local frame)
+            droneGroup.rotateX(THREE.MathUtils.degToRad(pitchRate * dt));
+            droneGroup.rotateY(THREE.MathUtils.degToRad(yawRate * dt));
+            droneGroup.rotateZ(THREE.MathUtils.degToRad(-rollRate * dt));
+
+            // Calculate thrust (throttle 0-1 mapped from -1 to 1 input)
+            const throttle01 = (rawThrottle + 1) / 2;
+            const thrustMagnitude = throttle01 * physics.maxThrust;
+
+            // Get drone's up vector (local Y in world space)
+            const thrustDir = new THREE.Vector3(0, 1, 0);
+            thrustDir.applyQuaternion(droneGroup.quaternion);
+
+            // Apply thrust
+            const thrust = thrustDir.multiplyScalar(thrustMagnitude);
+
+            // Acceleration = thrust/mass - gravity
+            const acceleration = new THREE.Vector3(
+                thrust.x,
+                thrust.y - physics.gravity,
+                thrust.z
+            );
+
+            // Update velocity
+            physics.velocity.add(acceleration.multiplyScalar(dt));
+
+            // Apply drag
+            const dragFactor = 1 - physics.dragCoeff * dt;
+            physics.velocity.multiplyScalar(dragFactor);
+
+            // Update position
+            physics.position.add(physics.velocity.clone().multiplyScalar(dt));
+
+            // Bounds check
+            const bound = groundSize / 2 - 10;
+            physics.position.x = THREE.MathUtils.clamp(physics.position.x, -bound, bound);
+            physics.position.z = THREE.MathUtils.clamp(physics.position.z, -bound, bound);
+            physics.position.y = Math.max(physics.position.y, physics.droneRadius);
+
+            // Sync drone group position
+            droneGroup.position.copy(physics.position);
+
+            // Check collisions
+            if (checkGroundCollision()) {
+                triggerCrash();
+                return;
+            }
+
+            if (checkGateCollision()) {
+                triggerCrash();
+                return;
+            }
+
+            if (checkBoundaryCollision()) {
+                triggerCrash();
+                return;
+            }
+
+            if (checkBuildingCollision()) {
+                triggerCrash();
+                return;
+            }
+
+            checkGatePass();
+        }
+
+        // --- 15. CAMERA UPDATE ---
+        // Pre-calculate the 180° flip quaternion (cameras look down -Z, drone forward is +Z)
+        const cameraFlipQuat = new THREE.Quaternion();
+        cameraFlipQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+
+        function updateCamera(dt) {
+            // FPV camera rigidly attached to front of drone body
+
+            // Camera position in drone's local space (front of drone, between front props)
+            const localOffset = cameraController.offset.clone();
+            localOffset.applyQuaternion(droneGroup.quaternion);
+            const camPos = physics.position.clone().add(localOffset);
+
+            // Set camera position
+            camera.position.copy(camPos);
+
+            // Start with drone's rotation
+            camera.quaternion.copy(droneGroup.quaternion);
+
+            // Flip camera 180° around Y so it looks forward (+Z) instead of backward (-Z)
+            camera.quaternion.multiply(cameraFlipQuat);
+
+            // Apply camera tilt (rotation around local X axis)
+            const tiltQuat = new THREE.Quaternion();
+            tiltQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(cameraController.tiltAngle));
+            camera.quaternion.multiply(tiltQuat);
+        }
+
+        // --- 16. HUD UPDATE ---
+        function updateHUD(throttle01) {
+            const speed = physics.velocity.length();
+            const alt = physics.position.y;
+
+            document.getElementById('hud-speed').textContent = speed.toFixed(1);
+            document.getElementById('hud-alt').textContent = alt.toFixed(1);
+            document.getElementById('hud-throttle').textContent = Math.round(throttle01 * 100);
+            document.getElementById('hud-tilt').textContent = cameraController.tiltAngle;
+
+            if (gameState.mode === 'racing') {
+                const elapsed = (performance.now() - gameState.raceStartTime) / 1000;
+                document.getElementById('race-time').textContent = formatTime(elapsed);
+            }
+        }
+
+        // --- 17. PROP ANIMATION ---
+        function animateProps(throttle01) {
+            const spinSpeed = throttle01 * 50;
+            propellers.forEach((prop, i) => {
+                prop.rotation.y += spinSpeed * (i % 2 === 0 ? 1 : -1) * 0.1;
+            });
+        }
+
+        // --- 18. INPUT HANDLING ---
+        let activeGamepadIndex = null;
+
+        window.addEventListener("gamepadconnected", (e) => {
+            activeGamepadIndex = e.gamepad.index;
+            showNotification(`Connected: ${e.gamepad.id}`);
+        });
+        window.addEventListener("gamepaddisconnected", () => {
+            activeGamepadIndex = null;
+            showNotification("Controller disconnected");
+        });
+
+        // Keyboard controls
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyR') {
+                resetDrone();
+            } else if (e.code === 'Space' || e.code === 'Enter') {
+                if (gameState.mode === 'freefly') {
+                    startRace();
+                }
+            } else if (e.code === 'Escape') {
+                if (gameState.mode === 'racing') {
+                    gameState.mode = 'freefly';
+                    document.getElementById('race-info').style.display = 'none';
+                    showNotification('Race cancelled');
+                }
+            } else if (e.code === 'KeyW') {
+                // Tilt camera up
+                cameraController.tiltAngle = Math.min(
+                    cameraController.maxTilt,
+                    cameraController.tiltAngle + 5
+                );
+                showNotification(`Camera tilt: ${cameraController.tiltAngle}°`);
+            } else if (e.code === 'KeyS') {
+                // Tilt camera down
+                cameraController.tiltAngle = Math.max(
+                    cameraController.minTilt,
+                    cameraController.tiltAngle - 5
+                );
+                showNotification(`Camera tilt: ${cameraController.tiltAngle}°`);
+            }
+        });
+
+        // Mode buttons
+        document.getElementById('mode-freefly').addEventListener('click', () => {
+            document.getElementById('mode-freefly').classList.add('active');
+            document.getElementById('mode-race').classList.remove('active');
+            if (gameState.mode === 'racing') {
+                gameState.mode = 'freefly';
+                document.getElementById('race-info').style.display = 'none';
+            }
+        });
+
+        document.getElementById('mode-race').addEventListener('click', () => {
+            document.getElementById('mode-race').classList.add('active');
+            document.getElementById('mode-freefly').classList.remove('active');
+            startRace();
+        });
+
+        // Reset button
+        document.getElementById('reset-cam').addEventListener('click', resetDrone);
+
+        // --- 19. CONTROLLER MAPPING UI ---
+        const modal = document.getElementById('mapping-modal');
+        const rowsContainer = document.getElementById('mapping-rows');
+        const functions = ['Roll', 'Pitch', 'Yaw', 'Throttle'];
+
+        document.getElementById('open-mapping').addEventListener('click', () => {
+            if (activeGamepadIndex === null) {
+                showNotification("Connect controller first!");
+                return;
+            }
+            renderMappingUI();
+            modal.style.display = 'flex';
+        });
+
+        document.getElementById('close-mapping').addEventListener('click', () => {
+            modal.style.display = 'none';
+            saveConfig();
+            showNotification("Mapping saved");
+        });
+
+        function renderMappingUI() {
+            rowsContainer.innerHTML = '';
+
+            functions.forEach(func => {
+                const key = func.toLowerCase();
+                const setting = config.mapping[key];
+
+                const row = document.createElement('div');
+                row.className = 'map-row';
+
+                const label = document.createElement('div');
+                label.className = 'map-label';
+                label.innerText = func;
+
+                const select = document.createElement('select');
+                select.className = 'map-select';
+                for (let i = 0; i < 8; i++) {
+                    const opt = document.createElement('option');
+                    opt.value = i;
+                    opt.innerText = `Axis ${i}`;
+                    if (i === setting.axis) opt.selected = true;
+                    select.appendChild(opt);
+                }
+                select.onchange = (e) => config.mapping[key].axis = parseInt(e.target.value);
+
+                const invertDiv = document.createElement('div');
+                invertDiv.className = 'map-invert';
+                const chk = document.createElement('input');
+                chk.type = 'checkbox';
+                chk.checked = setting.invert;
+                chk.onchange = (e) => config.mapping[key].invert = e.target.checked;
+                invertDiv.appendChild(chk);
+                invertDiv.appendChild(document.createTextNode('Inv'));
+
+                const viz = document.createElement('div');
+                viz.className = 'axis-viz';
+                const bar = document.createElement('div');
+                bar.className = 'axis-bar';
+                bar.id = `viz-${key}`;
+                viz.appendChild(bar);
+
+                row.appendChild(label);
+                row.appendChild(select);
+                row.appendChild(invertDiv);
+                row.appendChild(viz);
+                rowsContainer.appendChild(row);
+            });
+        }
+
+        // --- 20. WINDOW RESIZE ---
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        // --- 21. MAIN ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+        updateBestLap();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+
+            let rawRoll = 0, rawPitch = 0, rawYaw = 0, rawThrottle = -1;
+
+            if (activeGamepadIndex !== null) {
+                const gamepads = typeof window.getRcn1cGamepads === 'function'
+                    ? window.getRcn1cGamepads()
+                    : (typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : []);
+                const gp = gamepads[activeGamepadIndex];
+                if (gp) {
+                    const getAxisVal = (name) => {
+                        const map = config.mapping[name];
+                        let val = gp.axes[map.axis] || 0;
+                        if (map.invert) val *= -1;
+                        return val;
+                    };
+
+                    rawRoll = getAxisVal('roll');
+                    rawPitch = getAxisVal('pitch');
+                    rawYaw = getAxisVal('yaw');
+                    rawThrottle = getAxisVal('throttle');
+
+                    // Update mapping visualizers if modal is open
+                    if (modal.style.display === 'flex') {
+                        const updateViz = (name, val) => {
+                            const bar = document.getElementById(`viz-${name}`);
+                            if (bar) {
+                                const pct = (val + 1) * 50;
+                                bar.style.left = val < 0 ? `${pct}%` : '50%';
+                                bar.style.width = `${Math.abs(val) * 50}%`;
+                            }
+                        };
+                        updateViz('roll', rawRoll);
+                        updateViz('pitch', rawPitch);
+                        updateViz('yaw', rawYaw);
+                        updateViz('throttle', rawThrottle);
+                    }
+                }
+            }
+
+            // Update systems
+            if (gameState.mode !== 'countdown') {
+                updatePhysics(dt, rawRoll, rawPitch, rawYaw, rawThrottle);
+            }
+            updateCamera(dt);
+
+            const throttle01 = (rawThrottle + 1) / 2;
+            updateHUD(throttle01);
+            animateProps(throttle01);
+            updateClouds(dt);
+
+            // Send multiplayer update
+            sendPlayerUpdate();
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+</script>
+<script src="simulator-bridge.js"></script>
+</body>
+</html>
