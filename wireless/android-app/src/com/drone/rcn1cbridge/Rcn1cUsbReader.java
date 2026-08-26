@@ -111,17 +111,35 @@ public final class Rcn1cUsbReader {
     }
 
     public synchronized boolean start(UsbDevice device) {
-        if (running || device == null || !usbManager.hasPermission(device)) return false;
+        if (running || worker != null || device == null || !usbManager.hasPermission(device)) return false;
         running = true;
         worker = new Thread(() -> run(device), "rcn1c-android-reader");
         worker.start();
         return true;
     }
 
-    public synchronized void stop() {
-        running = false;
-        if (worker != null) worker.interrupt();
-        worker = null;
+    public void stop() {
+        Thread t;
+        synchronized (this) {
+            running = false;
+            t = worker;
+        }
+        if (t != null) t.interrupt();
+    }
+
+    public void stopAndWait(long timeoutMs) {
+        Thread t;
+        synchronized (this) {
+            running = false;
+            t = worker;
+        }
+        if (t == null || t == Thread.currentThread()) return;
+        t.interrupt();
+        try {
+            t.join(timeoutMs);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public boolean isRunning() {
@@ -231,6 +249,9 @@ public final class Rcn1cUsbReader {
                 if (connection != null) connection.close();
             } catch (Throwable ignored) {
             }
+            synchronized (this) {
+                if (worker == Thread.currentThread()) worker = null;
+            }
             if (listener != null) listener.onStopped(stopReason);
         }
     }
@@ -240,14 +261,20 @@ public final class Rcn1cUsbReader {
         byte[] probe = new byte[256];
         for (Candidate c : candidates) {
             try {
-                if (!connection.claimInterface(c.iface, true)) continue;
+                if (c.iface != null && !connection.claimInterface(c.iface, true)) continue;
+                if (c.iface != null) {
+                    connection.controlTransfer(
+                            0x21, 0x22, 0x03, c.iface.getId(), null, 0, 1000);
+                }
                 connection.bulkTransfer(c.out, ENABLE_SIMULATOR, ENABLE_SIMULATOR.length, 100);
                 connection.bulkTransfer(c.out, REQUEST_STICKS, REQUEST_STICKS.length, 100);
                 int n = connection.bulkTransfer(c.in, probe, probe.length, 150);
                 if (n > 0 && containsFrameStart(probe, n)) return c;
-                connection.releaseInterface(c.iface);
+                if (c.iface != null) connection.releaseInterface(c.iface);
             } catch (Throwable ignored) {
-                try { connection.releaseInterface(c.iface); } catch (Throwable ignored2) {}
+                if (c.iface != null) {
+                    try { connection.releaseInterface(c.iface); } catch (Throwable ignored2) {}
+                }
             }
         }
         return null;
@@ -255,6 +282,8 @@ public final class Rcn1cUsbReader {
 
     private static List<Candidate> candidates(UsbDevice device) {
         List<Candidate> out = new ArrayList<>();
+        UsbEndpoint firstIn = null;
+        UsbEndpoint firstOut = null;
         for (int i = 0; i < device.getInterfaceCount(); i++) {
             UsbInterface iface = device.getInterface(i);
             UsbEndpoint in = null, bulkOut = null;
@@ -265,8 +294,21 @@ public final class Rcn1cUsbReader {
                 else bulkOut = ep;
             }
             if (in != null && bulkOut != null) out.add(new Candidate(iface, in, bulkOut));
+            if (in != null && firstIn == null) firstIn = in;
+            if (bulkOut != null && firstOut == null) firstOut = bulkOut;
+        }
+        if (firstIn != null && firstOut != null && !hasEndpoints(out, firstIn, firstOut)) {
+            out.add(new Candidate(null, firstIn, firstOut));
         }
         return out;
+    }
+
+    private static boolean hasEndpoints(List<Candidate> candidates,
+                                        UsbEndpoint in, UsbEndpoint out) {
+        for (Candidate candidate : candidates) {
+            if (candidate.in == in && candidate.out == out) return true;
+        }
+        return false;
     }
 
     private static boolean containsFrameStart(byte[] data, int n) {

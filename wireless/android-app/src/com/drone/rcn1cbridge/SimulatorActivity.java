@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -17,15 +18,23 @@ import android.view.WindowManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.Listener {
     private static final String ACTION_USB_PERMISSION = "com.drone.rcn1cbridge.SIMULATOR_USB_PERMISSION";
+    private static final String LOCAL_ASSET_BASE = "https://appassets.androidplatform.net/assets/fpv-sim/";
+    private static final String LOCAL_ASSET_HOST = "appassets.androidplatform.net";
     private static final long RETRY_MS = 1200L;
     private static final long FRAME_PUSH_MS = 16L;
 
@@ -33,6 +42,8 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
     private volatile Rcn1cUsbReader.Frame latestFrame;
     private volatile boolean pageReady;
     private volatile boolean closing;
+    private volatile int readerDeviceId = -1;
+    private boolean frameStreamConnected;
 
     private WebView webView;
     private TextView status;
@@ -62,7 +73,13 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
                 boolean granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
                 postStatus(granted ? "Permesso USB ricevuto" : "Permesso USB negato");
                 if (granted) startReaderIfPossible();
+                else scheduleReaderRetry();
             } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
+                UsbDevice detached = detachedDevice(intent);
+                if (detached == null || readerDeviceId == -1
+                        || detached.getDeviceId() != readerDeviceId) return;
+                latestFrame = null;
+                frameStreamConnected = false;
                 if (reader != null) reader.stop();
                 postStatus("RC scollegato · collega di nuovo il radiocomando");
             }
@@ -95,7 +112,8 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         closing = true;
         ui.removeCallbacks(retryReader);
         ui.removeCallbacks(framePump);
-        if (reader != null) reader.stop();
+        latestFrame = null;
+        if (reader != null) reader.stopAndWait(500L);
         try {
             unregisterReceiver(usbReceiver);
         } catch (Exception ignored) {
@@ -113,7 +131,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(true);
+        settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
@@ -123,12 +141,28 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         webView.setBackgroundColor(0xFF05080B);
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return !isLocalAsset(request.getUrl());
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view,
+                                                               WebResourceRequest request) {
+                return openLocalAsset(request.getUrl());
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 pageReady = true;
                 postStatus("Simulatore pronto · attendo RC-N1C");
             }
         });
-        webView.loadUrl("file:///android_asset/fpv-sim/index.html");
+        webView.loadDataWithBaseURL(
+                LOCAL_ASSET_BASE + "index.html",
+                readAssetText("fpv-sim/index.html"),
+                "text/html",
+                "UTF-8",
+                null);
         root.addView(webView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -153,8 +187,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         UsbDevice device = Rcn1cUsbReader.findDji(manager);
         if (device == null) {
             postStatus("Collega l'RC-N1C via OTG");
-            ui.removeCallbacks(retryReader);
-            ui.postDelayed(retryReader, RETRY_MS);
+            scheduleReaderRetry();
             return;
         }
         if (!manager.hasPermission(device)) {
@@ -162,9 +195,14 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
             postStatus("Conferma il permesso USB per l'RC");
             return;
         }
+        readerDeviceId = device.getDeviceId();
+        latestFrame = null;
+        frameStreamConnected = false;
         if (!reader.start(device)) {
             postStatus("Impossibile avviare il lettore RC");
-            ui.postDelayed(retryReader, RETRY_MS);
+            readerDeviceId = -1;
+            scheduleReaderRetry();
+            return;
         }
     }
 
@@ -179,7 +217,17 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
 
     private void pushLatestFrame() {
         Rcn1cUsbReader.Frame frame = latestFrame;
-        if (!pageReady || frame == null || webView == null) return;
+        if (!pageReady || webView == null || closing) return;
+        if (frame == null || reader == null || !reader.isRunning()) {
+            latestFrame = null;
+            if (frameStreamConnected) {
+                frameStreamConnected = false;
+                webView.evaluateJavascript(
+                        "window.setRcn1cStatus('RC scollegato',false);", null);
+            }
+            return;
+        }
+        frameStreamConnected = true;
         String script = String.format(Locale.US,
                 "window.setRcn1cFrame(%d,%d,%d,%d,%d,%d,%.1f);",
                 frame.lx, frame.ly, frame.rx, frame.ry,
@@ -200,13 +248,17 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
     @Override
     public void onStopped(String reason) {
         if (!closing) {
+            latestFrame = null;
+            frameStreamConnected = false;
+            readerDeviceId = -1;
             postStatus("Lettore fermo · " + reason);
-            ui.postDelayed(retryReader, RETRY_MS);
+            scheduleReaderRetry();
         }
     }
 
     private void postStatus(String message) {
         ui.post(() -> {
+            if (closing) return;
             if (status != null) status.setText(message);
             if (webView != null) {
                 webView.evaluateJavascript(
@@ -214,6 +266,60 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
                                 (reader != null && reader.isRunning()) + ");", null);
             }
         });
+    }
+
+    private void scheduleReaderRetry() {
+        ui.removeCallbacks(retryReader);
+        if (!closing) ui.postDelayed(retryReader, RETRY_MS);
+    }
+
+    @SuppressWarnings("deprecation")
+    private UsbDevice detachedDevice(Intent intent) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            return intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice.class);
+        }
+        return intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+    }
+
+    private boolean isLocalAsset(Uri uri) {
+        if (uri == null || !"https".equals(uri.getScheme())
+                || !LOCAL_ASSET_HOST.equals(uri.getHost())) return false;
+        String path = uri.getPath();
+        return path != null && path.startsWith("/assets/fpv-sim/") && !path.contains("..");
+    }
+
+    private WebResourceResponse openLocalAsset(Uri uri) {
+        if (!isLocalAsset(uri)) return null;
+        String assetPath = uri.getPath().substring("/assets/".length());
+        try {
+            return new WebResourceResponse(
+                    mimeType(assetPath),
+                    "UTF-8",
+                    getAssets().open(assetPath));
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
+    private String readAssetText(String assetPath) {
+        try (InputStream input = getAssets().open(assetPath);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            return new String(output.toByteArray(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("Asset simulatore non leggibile", e);
+        }
+    }
+
+    private static String mimeType(String assetPath) {
+        if (assetPath.endsWith(".js")) return "application/javascript";
+        if (assetPath.endsWith(".css")) return "text/css";
+        if (assetPath.endsWith(".html")) return "text/html";
+        if (assetPath.endsWith(".png")) return "image/png";
+        if (assetPath.endsWith(".jpg") || assetPath.endsWith(".jpeg")) return "image/jpeg";
+        return "application/octet-stream";
     }
 
     private int dp(float value) {

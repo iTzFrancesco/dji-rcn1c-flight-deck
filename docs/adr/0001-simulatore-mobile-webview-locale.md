@@ -62,6 +62,7 @@ restano il prossimo incremento, dopo aver validato gli assi.
 
 ## Licenze
 
-Il codice importato di FPV.Sim e Three.js conserva i rispettivi file `LICENSE`.
+Il codice importato di FPV.Sim e Three.js conserva i rispettivi file di licenza
+(`LICENSE` e `THREE_JS_LICENSE`).
 Prima di distribuire una release pubblica bisogna mantenere gli avvisi di
 copyright delle dipendenze e verificare eventuali nuove risorse esterne.

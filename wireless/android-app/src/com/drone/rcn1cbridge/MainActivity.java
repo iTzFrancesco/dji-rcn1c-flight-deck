@@ -691,9 +691,11 @@ public class MainActivity extends Activity {
         running.set(false);
         Thread t = worker;
         if (t != null) {
+            t.interrupt();
             try {
                 t.join(1200);
             } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
             }
         }
         releaseLocks();
@@ -741,6 +743,7 @@ public class MainActivity extends Activity {
     }
 
     private boolean waitPermission(UsbDevice dev) {
+        if (!running.get()) return false;
         UsbManager um = (UsbManager) getSystemService(USB_SERVICE);
         if (um.hasPermission(dev)) return true;
         PendingIntent pi = PendingIntent.getBroadcast(this, 0,
@@ -751,9 +754,10 @@ public class MainActivity extends Activity {
             try {
                 usbReceiver.wait(30000);
             } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
             }
         }
-        return um.hasPermission(dev);
+        return running.get() && um.hasPermission(dev);
     }
 
     private UsbDevice findDji(UsbManager um) {

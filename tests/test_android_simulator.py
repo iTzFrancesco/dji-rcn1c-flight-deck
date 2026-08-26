@@ -1,4 +1,7 @@
 import xml.etree.ElementTree as ET
+import shutil
+import subprocess
+import textwrap
 from pathlib import Path
 
 
@@ -25,10 +28,20 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
 
     source = (PACKAGE / 'SimulatorActivity.java').read_text(encoding='utf-8')
     assert 'Rcn1cUsbReader' in source
-    assert 'file:///android_asset/fpv-sim/index.html' in source
+    assert 'loadDataWithBaseURL' in source
+    assert 'appassets.androidplatform.net' in source
+    assert 'setAllowFileAccess(false)' in source
+    assert 'file:///' not in source
+    assert 'stopAndWait(500L)' in source
+    assert 'readerDeviceId' in source
     assert 'setRcn1cFrame(' in source
     assert 'dispatchGesture' not in source
     assert 'AccessibilityService' not in source
+
+    reader = (PACKAGE / 'Rcn1cUsbReader.java').read_text(encoding='utf-8')
+    assert 'controlTransfer' in reader
+    assert 'firstIn' in reader and 'firstOut' in reader
+    assert 'stopAndWait' in reader
 
     main = (PACKAGE / 'MainActivity.java').read_text(encoding='utf-8')
     assert 'SIMULATORE FPV' in main
@@ -45,6 +58,52 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'getRcn1cGamepads' in bridge
     assert 'navigator.getGamepads' in bridge
     assert 'gamepadconnected' in bridge
+    assert 'state.connected' in bridge
+    assert (ASSETS / 'THREE_JS_LICENSE').exists()
+
+
+def test_simulator_bridge_runtime_fails_safe_when_rc_is_absent_or_detached():
+    node = shutil.which('node')
+    if node is None:
+        return
+
+    harness = textwrap.dedent(
+        """
+        const fs = require('fs');
+        const vm = require('vm');
+        const assert = require('assert');
+        const elements = {};
+        const events = [];
+        global.window = { dispatchEvent: e => events.push(e.type), setTimeout, console };
+        global.navigator = { getGamepads: () => [] };
+        global.performance = { now: () => 123.4 };
+        global.document = {
+          body: { appendChild: e => { elements[e.id] = e; } },
+          createElement: () => ({ style: {}, id: '', textContent: '' }),
+          getElementById: id => elements[id] || null
+        };
+        global.Event = class Event { constructor(type) { this.type = type; } };
+        vm.runInThisContext(fs.readFileSync('wireless/android-app/assets/fpv-sim/simulator-bridge.js', 'utf8'));
+        assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [0, 1, 0, 0]);
+        window.setRcn1cFrame(32767, -32767, 16384, -16384, 0x0080, 1, 120.0);
+        assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [1, 1, 0.500015259254738, 0.500015259254738]);
+        window.setRcn1cStatus('RC scollegato', false);
+        assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [0, 1, 0, 0]);
+        assert.deepStrictEqual(events, ['gamepadconnected', 'gamepaddisconnected']);
+        console.log('BRIDGE_JS_FAILSAFE_PASS');
+        """
+    )
+    result = subprocess.run(
+        [node, '-e', harness],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding='utf-8',
+        errors='replace',
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert 'BRIDGE_JS_FAILSAFE_PASS' in result.stdout
 
 
 if __name__ == '__main__':

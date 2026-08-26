@@ -11,11 +11,12 @@
         packetsPerSecond: 0,
         connected: false
     };
+    var gamepadAnnounced = false;
 
     var fakeGamepad = {
         id: 'DJI RC-N1C raw bridge',
         index: 0,
-        connected: true,
+        connected: false,
         timestamp: 0,
         mapping: '',
         axes: [0, 0, 0, 0],
@@ -32,15 +33,35 @@
         return clamp(value / 32767);
     }
 
+    function invertedAxis(value) {
+        return value === 0 ? 0 : -value;
+    }
+
     function updateGamepad() {
         // Emulate the standard Mode 2 HID axis order expected by FPV.Sim.
+        if (!state.connected) {
+            fakeGamepad.axes[0] = 0;
+            fakeGamepad.axes[1] = 1;
+            fakeGamepad.axes[2] = 0;
+            fakeGamepad.axes[3] = 0;
+            fakeGamepad.timestamp = typeof performance !== 'undefined'
+                ? performance.now()
+                : Date.now();
+            return;
+        }
         fakeGamepad.axes[0] = axis(state.lx);     // yaw
-        fakeGamepad.axes[1] = -axis(state.ly);    // throttle, HID Y direction
+        fakeGamepad.axes[1] = invertedAxis(axis(state.ly)); // throttle, HID Y direction
         fakeGamepad.axes[2] = axis(state.rx);     // roll
-        fakeGamepad.axes[3] = -axis(state.ry);    // pitch, HID Y direction
+        fakeGamepad.axes[3] = invertedAxis(axis(state.ry)); // pitch, HID Y direction
         fakeGamepad.timestamp = typeof performance !== 'undefined'
             ? performance.now()
             : Date.now();
+    }
+
+    function dispatchGamepadEvent(type) {
+        var event = new Event(type);
+        Object.defineProperty(event, 'gamepad', { value: fakeGamepad });
+        window.dispatchEvent(event);
     }
 
     window.setRcn1cFrame = function (lx, ly, rx, ry, buttonMask, mode, packetsPerSecond) {
@@ -52,11 +73,22 @@
         state.mode = mode;
         state.packetsPerSecond = packetsPerSecond;
         state.connected = true;
+        fakeGamepad.connected = true;
         updateGamepad();
+        if (!gamepadAnnounced) {
+            gamepadAnnounced = true;
+            dispatchGamepadEvent('gamepadconnected');
+        }
     };
 
     window.setRcn1cStatus = function (message, connected) {
         state.connected = Boolean(connected);
+        fakeGamepad.connected = state.connected;
+        updateGamepad();
+        if (!state.connected && gamepadAnnounced) {
+            gamepadAnnounced = false;
+            dispatchGamepadEvent('gamepaddisconnected');
+        }
         var element = document.getElementById('rcn1c-bridge-status');
         if (element) {
             element.textContent = message || 'RC non collegato';
@@ -98,9 +130,4 @@
     document.body.appendChild(status);
 
     updateGamepad();
-    window.dispatchEvent((function () {
-        var event = new Event('gamepadconnected');
-        Object.defineProperty(event, 'gamepad', { value: fakeGamepad });
-        return event;
-    })());
 })();
