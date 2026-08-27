@@ -66,13 +66,12 @@
         update: function (throttle, speed) {
             if (!context || !master) return;
             var t = Math.max(0, Math.min(1, Number(throttle) || 0));
-            var s = Math.max(0, Math.min(42, Number(speed) || 0));
-            var frequency = 78 + (t * 250) + (s * 1.7);
+            var s = Math.max(0, Math.min(55, Number(speed) || 0));
+            var frequency = 138 + (t * 220) + (s * 1.4);
             motors.forEach(function (motor, index) {
-                var now = context.currentTime;
                 setParam(motor.oscillator.frequency,
-                    frequency * (1 + index * 0.012));
-                setParam(motor.gain, enabled ? 0.18 : 0);
+                    frequency * (1 + index * 0.010));
+                setParam(motor.gain, enabled ? 0.11 : 0);
             });
         },
         isEnabled: function () { return enabled; }

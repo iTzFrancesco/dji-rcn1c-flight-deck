@@ -19,6 +19,7 @@ def test_gamepad_mode_selection():
 def test_desktop_launcher_enables_usb_gamepad():
     launcher = (ROOT / 'tools' / 'RC-N1C-Dashboard.bat').read_text(encoding='utf-8')
     assert 'controller_viz.py" --gamepad --no-browser' in launcher
+    assert 'controller_viz.py" --source udp --gamepad --no-browser' in launcher
 
 
 def test_serial_gamepad_cli_starts_both_threads(monkeypatch):

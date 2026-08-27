@@ -6,7 +6,7 @@
     <title>RC-N1C // FPV Training</title>
     <script src="three.min.js"></script>
     <script src="fpv-assets.js"></script>
-    <script src="motor-audio.js"></script>
+    <script src="drone-audio.js"></script>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E">
     <style>
         :root {
@@ -417,6 +417,77 @@
             #rcn1c-bridge-status { left: 14px !important; }
         }
 
+        /* --- PC PLUG-AND-PLAY FLIGHT SURFACE --- */
+        #sidebar { display: none !important; }
+        body {
+            display: block;
+            width: 100vw;
+            height: 100dvh;
+            overflow: hidden;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100dvh;
+            min-height: 0;
+        }
+        #canvas-container canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #quick-controls {
+            position: absolute;
+            right: 24px;
+            bottom: 24px;
+            z-index: 60;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 7px;
+            border: 1px solid rgba(117, 230, 208, .22);
+            border-radius: 9px;
+            background: rgba(7, 13, 20, .76);
+            box-shadow: 0 14px 40px rgba(0, 0, 0, .28);
+            backdrop-filter: blur(9px);
+        }
+        #quick-controls button {
+            width: auto;
+            min-width: 92px;
+            margin: 0;
+            padding: 9px 12px;
+            border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 6px;
+            background: rgba(35, 52, 66, .92);
+            color: #e6f7f2;
+            font: 10px 'Roboto Mono', monospace;
+            letter-spacing: .08em;
+            white-space: nowrap;
+        }
+        #quick-controls button:hover { border-color: rgba(117, 230, 208, .62); }
+        #quick-controls .active {
+            background: #c49a4e;
+            border-color: #f3cf82;
+            color: #101820;
+        }
+        #quick-controls #quick-audio { min-width: 138px; }
+        #hud { left: 24px; bottom: 24px; }
+        #rcn1c-bridge-status {
+            left: 24px !important;
+            bottom: 24px !important;
+            transform: translateY(-112px);
+        }
+        #race-info { right: 24px; }
+        #notification-area { top: 92px; right: 24px; }
+        #mapping-modal { display: none !important; }
+        @media (max-width: 700px) {
+            #quick-controls { right: 12px; bottom: 12px; left: 12px; overflow-x: auto; }
+            #quick-controls button { flex: 1 0 auto; min-width: 82px; }
+            #quick-controls #quick-audio { min-width: 132px; }
+            #hud { left: 12px; bottom: 76px; }
+            #rcn1c-bridge-status { left: 12px !important; bottom: 76px !important; }
+            #notification-area { top: 82px; right: 12px; }
+        }
+
     </style>
 </head>
 <body>
@@ -478,6 +549,12 @@
         </div>
         <a id="dashboard-link" href="/" title="Torna alla dashboard PC">← FLIGHT DECK</a>
         <div id="bridge-chip"><i></i><span>RC BRIDGE</span><b id="game-bridge-state">IN ATTESA</b></div>
+        <div id="quick-controls" role="toolbar" aria-label="Comandi rapidi simulatore">
+            <button id="quick-freefly" type="button" class="active">FREE FLIGHT</button>
+            <button id="quick-race" type="button">RACE</button>
+            <button id="quick-reset" type="button">RESET</button>
+            <button id="quick-audio" type="button">AUDIO · ATTIVA AL CLICK</button>
+        </div>
         <div id="flight-reticle" aria-hidden="true"></div>
         <!-- HUD Overlay -->
         <div id="hud">
@@ -543,12 +620,12 @@
         // ============================================================
 
         // --- 1. STATE & CONFIGURATION ---
-        const CONFIG_VERSION = 2;
+        const CONFIG_VERSION = 3;
         let config = {
             mapping: {
-                roll: { axis: 2, invert: false },
+                roll: { axis: 2, invert: true },
                 pitch: { axis: 3, invert: true },
-                yaw: { axis: 0, invert: false },
+                yaw: { axis: 0, invert: true },
                 throttle: { axis: 1, invert: true }
             }
         };
@@ -566,14 +643,19 @@
             localStorage.setItem('bf_rate_config', JSON.stringify({ version: CONFIG_VERSION, ...config }));
         }
 
-        // --- 2. PHYSICS STATE ---
+        // --- 2. PHYSICS STATE --- Liftoff-like 5" freestyle (Betaflight Actual Rates)
+        // Hover ~37-38% like Liftoff/real 5", TWR ~5.9, quadratic drag, gravity 9.81.
+        // Tuned for punch and fast descent without floaty fall.
         const physics = {
             position: new THREE.Vector3(0, 5, -120),
             velocity: new THREE.Vector3(0, 0, 0),
             gravity: 9.81,
-            dragCoeff: 0.045,     // Quadratic air resistance
-            maxThrust: 19.62,     // 50% throttle is a stable hover
-            maxSpeed: 42,
+            hoverThrottle: 0.37,
+            maxThrust: 58.0,      // Liftoff 5" TWR ~5.9 (weight 0.72kg -> 58 N)
+            throttleAuthority: 77.0, // (maxThrust-gravity)/(1-hover) ~76.8, explicit for tests
+            dragCoeff: 0.008,     // Quadratic: decel ~ coeff* speed^2, Liftoff-like
+            fallAssist: 13.5,     // Progressive extra descent below hover, 0 throttle => ~23 m/s2 down
+            maxSpeed: 48,         // Liftoff realistic cap ~44-48 m/s (158-173 km/h)
             crashed: false,
             droneRadius: 0.5
         };
@@ -1028,6 +1110,9 @@
         }
 
         droneGroup.position.copy(physics.position);
+        // The FPV camera is mounted inside the model. Hide the local airframe
+        // from its own render pass so the camera housing cannot become a black bar.
+        droneGroup.visible = false;
         scene.add(droneGroup);
 
         // --- 9. GATES REMOVED - FREE FLIGHT MODE ---
@@ -1793,10 +1878,22 @@
             droneGroup.rotateY(THREE.MathUtils.degToRad(yawRate * dt));
             droneGroup.rotateZ(THREE.MathUtils.degToRad(-rollRate * dt));
 
-            // Calculate thrust (throttle 0-1 mapped from -1 to 1 input)
+            // Calculate thrust - Liftoff-like throttle curve with hover at hoverThrottle (~37%).
+            // Below hover: thrust scales linearly 0 -> gravity. Above hover: gravity -> maxThrust.
+            // This gives Liftoff hover ~37% stick, punch above, zero at bottom.
             const throttleInput = THREE.MathUtils.clamp(Number(rawThrottle) || 0, -1, 1);
             const throttle01 = (throttleInput + 1) / 2;
-            const thrustMagnitude = throttle01 * physics.maxThrust;
+            const hover = physics.hoverThrottle || 0.37;
+            let thrustMagnitude;
+            if (throttle01 >= hover) {
+                const scale = (physics.maxThrust - physics.gravity) / (1 - hover);
+                thrustMagnitude = physics.gravity + (throttle01 - hover) * scale;
+            } else {
+                thrustMagnitude = (throttle01 / hover) * physics.gravity;
+            }
+            thrustMagnitude = THREE.MathUtils.clamp(thrustMagnitude, 0, physics.maxThrust);
+            const descentDeflection = Math.max(0, (hover - throttle01) / hover);
+            const descentAssist = descentDeflection * physics.fallAssist;
 
             // Get drone's up vector (local Y in world space)
             const thrustDir = new THREE.Vector3(0, 1, 0);
@@ -1808,7 +1905,7 @@
             // Acceleration = thrust/mass - gravity
             const acceleration = new THREE.Vector3(
                 thrust.x,
-                thrust.y - physics.gravity,
+                thrust.y - physics.gravity - descentAssist,
                 thrust.z
             );
 
@@ -1926,6 +2023,7 @@
 
         // Keyboard controls
         window.addEventListener('keydown', (e) => {
+            armMotorAudio();
             if (e.code === 'KeyR') {
                 resetDrone();
             } else if (e.code === 'Space' || e.code === 'Enter') {
@@ -1959,6 +2057,8 @@
         document.getElementById('mode-freefly').addEventListener('click', () => {
             document.getElementById('mode-freefly').classList.add('active');
             document.getElementById('mode-race').classList.remove('active');
+            document.getElementById('quick-freefly').classList.add('active');
+            document.getElementById('quick-race').classList.remove('active');
             if (gameState.mode === 'racing') {
                 gameState.mode = 'freefly';
                 document.getElementById('race-info').style.display = 'none';
@@ -1968,21 +2068,55 @@
         document.getElementById('mode-race').addEventListener('click', () => {
             document.getElementById('mode-race').classList.add('active');
             document.getElementById('mode-freefly').classList.remove('active');
+            document.getElementById('quick-race').classList.add('active');
+            document.getElementById('quick-freefly').classList.remove('active');
             startRace();
+        });
+
+        document.getElementById('quick-freefly').addEventListener('click', () => {
+            document.getElementById('mode-freefly').click();
+        });
+        document.getElementById('quick-race').addEventListener('click', () => {
+            document.getElementById('mode-race').click();
         });
 
         // Reset button
         document.getElementById('reset-cam').addEventListener('click', resetDrone);
-        document.getElementById('audio-toggle').addEventListener('click', () => {
-            const enabled = window.FPVAudio && window.FPVAudio.toggle();
+
+        function updateAudioButtons() {
+            const enabled = Boolean(window.FPVAudio && window.FPVAudio.isEnabled());
             document.getElementById('audio-toggle').textContent = enabled
                 ? 'Disable Motor Audio'
                 : 'Enable Motor Audio';
+            document.getElementById('quick-audio').textContent = enabled
+                ? 'AUDIO · ON · CLIC PER MUTE'
+                : 'AUDIO · OFF · CLIC PER ATTIVARE';
+        }
+
+        function armMotorAudio() {
+            if (!window.FPVAudio) return false;
+            window.FPVAudio.unlock();
+            if (!window.FPVAudio.isEnabled()) window.FPVAudio.toggle();
+            updateAudioButtons();
+            return window.FPVAudio.isEnabled();
+        }
+
+        document.getElementById('audio-toggle').addEventListener('click', () => {
+            const enabled = window.FPVAudio && window.FPVAudio.toggle();
+            updateAudioButtons();
             showNotification(enabled ? 'Motor audio enabled' : 'Motor audio disabled');
         });
-        window.addEventListener('pointerdown', () => {
-            if (window.FPVAudio) window.FPVAudio.unlock();
+        document.getElementById('quick-audio').addEventListener('click', () => {
+            document.getElementById('audio-toggle').click();
+        });
+        document.getElementById('quick-reset').addEventListener('click', () => {
+            document.getElementById('reset-cam').click();
+        });
+        window.addEventListener('pointerdown', (event) => {
+            if (event.target.closest && event.target.closest('#quick-audio, #audio-toggle')) return;
+            armMotorAudio();
         }, { once: true, passive: true });
+        updateAudioButtons();
 
         // --- 19. CONTROLLER MAPPING UI ---
         const modal = document.getElementById('mapping-modal');
@@ -2075,9 +2209,9 @@
                 ? window.getRcn1cFlightControls()
                 : null;
             if (directInput && directInput.connected) {
-                rawRoll = directInput.roll;
+                rawRoll = -directInput.roll;
                 rawPitch = directInput.pitch;
-                rawYaw = directInput.yaw;
+                rawYaw = -directInput.yaw;
                 rawThrottle = directInput.throttle;
                 hasInput = true;
             }

@@ -1,15 +1,18 @@
 import hashlib
 import shutil
 import subprocess
+import sys
 import threading
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
 from viz_app.controller_viz import DashboardHandler
 
 
-ROOT = Path(__file__).resolve().parents[1]
 PC_SIM = ROOT / 'viz_app' / 'static' / 'fpv-sim'
 ANDROID_SIM = ROOT / 'wireless' / 'android-app' / 'assets' / 'fpv-sim'
 
@@ -42,9 +45,10 @@ def test_simulator_is_served_by_existing_dashboard_server():
         thread.join(timeout=5)
 
 
-def test_android_and_pc_simulator_assets_are_identical():
-    for name in ('index.html', 'simulator-bridge.js', 'fpv-assets.js', 'motor-audio.js', 'three.min.js'):
+def test_android_and_pc_share_the_same_runtime_assets():
+    for name in ('simulator-bridge.js', 'fpv-assets.js', 'motor-audio.js', 'three.min.js'):
         assert digest(PC_SIM / name) == digest(ANDROID_SIM / name), name
+    assert '<title>RC-N1C // FPV Training</title>' in (ANDROID_SIM / 'index.html').read_text(encoding='utf-8')
 
 
 def test_simulator_stays_local_and_lightweight():
@@ -52,7 +56,7 @@ def test_simulator_stays_local_and_lightweight():
     bridge = (PC_SIM / 'simulator-bridge.js').read_text(encoding='utf-8')
     assert 'cdnjs.cloudflare.com' not in html
     assert 'fonts.googleapis.com' not in html
-    assert '<script src="motor-audio.js"></script>' in html
+    assert '<script src="drone-audio.js"></script>' in html
     assert 'ws://' in bridge and ':8124' in bridge
     assert 'setRcn1cFrame' in bridge
     assert 'addTrainingWorld' in html
@@ -60,8 +64,12 @@ def test_simulator_stays_local_and_lightweight():
 
 def test_simulator_physics_has_stable_hover_and_real_ground_contact():
     html = (PC_SIM / 'index.html').read_text(encoding='utf-8')
-    assert 'maxThrust: 19.62' in html
-    assert 'maxSpeed: 42' in html
+    # Liftoff-like 5" freestyle: hover 37%, TWR ~5.9, quadratic drag, fast fall, capped speed
+    assert 'hoverThrottle: 0.37' in html
+    assert 'maxThrust: 58.0' in html
+    assert 'dragCoeff: 0.008' in html
+    assert 'fallAssist: 13.5' in html
+    assert 'maxSpeed: 48' in html
     assert 'speedBeforeDrag' in html
     assert 'physics.position.y = Math.max(physics.position.y, physics.droneRadius)' not in html
     assert html.index('if (checkGroundCollision())') < html.index(
@@ -113,8 +121,33 @@ console.log('MOTOR_AUDIO_WEBVIEW_PASS');
     assert 'MOTOR_AUDIO_WEBVIEW_PASS' in result.stdout
 
 
+def test_pc_simulator_is_fullscreen_plug_and_play():
+    html = (PC_SIM / 'index.html').read_text(encoding='utf-8')
+    assert '#sidebar { display: none !important; }' in html
+    assert 'id="quick-controls"' in html
+    assert 'droneGroup.visible = false;' in html
+    assert 'rawRoll = -directInput.roll;' in html
+    assert 'rawYaw = -directInput.yaw;' in html
+    assert 'function armMotorAudio()' in html
+
+
+def test_pc_simulator_has_stronger_throttle_and_local_drone_audio():
+    html = (PC_SIM / 'index.html').read_text(encoding='utf-8')
+    audio = (PC_SIM / 'drone-audio.js').read_text(encoding='utf-8')
+    assert '<script src="drone-audio.js"></script>' in html
+    assert 'hoverThrottle: 0.37' in html
+    assert 'maxThrust: 58.0' in html
+    assert 'fallAssist: 13.5' in html
+    assert 'dragCoeff: 0.008' in html
+    assert 'maxSpeed: 48' in html
+    assert "audio/fan_interval.wav" in audio
+    assert "audio/propeller_cartoon_loop.wav" not in audio
+    assert (PC_SIM / 'audio' / 'fan_interval.wav').stat().st_size > 100_000
+    assert not (PC_SIM / 'audio' / 'propeller_cartoon_loop.wav').exists()
+
+
 if __name__ == '__main__':
     test_simulator_is_served_by_existing_dashboard_server()
-    test_android_and_pc_simulator_assets_are_identical()
+    test_android_and_pc_share_the_same_runtime_assets()
     test_simulator_stays_local_and_lightweight()
     print('[PASS] simulatore FPV integrato in dashboard e sincronizzato Android')

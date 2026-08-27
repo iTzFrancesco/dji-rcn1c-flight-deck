@@ -11,12 +11,50 @@
 
     function addMountain(THREE, parent, x, z, radius, height, color) {
         var mountain = new THREE.Mesh(
-            new THREE.ConeGeometry(radius, height, 7),
-            material(THREE, color, { roughness: 1 })
+            new THREE.ConeGeometry(radius, height, 8),
+            material(THREE, color, { roughness: 1, flatShading: true })
         );
         mountain.position.set(x, height / 2 - 7, z);
         mountain.rotation.y = (x + z) * 0.003;
+        var cap = new THREE.Mesh(
+            new THREE.ConeGeometry(radius * 0.32, height * 0.18, 8),
+            material(THREE, 0xeef2f5, { roughness: 0.95 })
+        );
+        cap.position.y = height * 0.41;
+        mountain.add(cap);
         parent.add(mountain);
+    }
+
+    function addWarehouse(THREE, parent, x, z, w, d, h, color) {
+        var group = new THREE.Group();
+        group.position.set(x, 0, z);
+        var wallMat = material(THREE, color, { roughness: 0.88, metalness: 0.12 });
+        var roofMat = material(THREE, 0x2f3a46, { roughness: 0.92, metalness: 0.18 });
+        var base = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+        base.position.y = h/2;
+        base.castShadow = true; base.receiveShadow = true;
+        group.add(base);
+        var roof = new THREE.Mesh(new THREE.BoxGeometry(w+1.2, 0.6, d+1.2), roofMat);
+        roof.position.y = h + 0.3; group.add(roof);
+        var door = new THREE.Mesh(new THREE.PlaneGeometry(w*0.42, h*0.62), new THREE.MeshBasicMaterial({ color: 0x0b0f14 }));
+        door.position.set(0, h*0.36, d/2 + 0.06); group.add(door);
+        var vent = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.2, 10), material(THREE, 0x4a5a6a, { roughness: 0.6, metalness: 0.5 }));
+        vent.position.set(w*0.18, h+1.0, 0); group.add(vent);
+        parent.add(group);
+    }
+
+    function addContainer(THREE, parent, x, z, rotation, color) {
+        var group = new THREE.Group();
+        group.position.set(x, 0.95, z); group.rotation.y = rotation;
+        var body = new THREE.Mesh(new THREE.BoxGeometry(12, 2.6, 2.45), material(THREE, color, { roughness: 0.82, metalness: 0.22 }));
+        body.castShadow = true; body.receiveShadow = true; group.add(body);
+        for (var i=-5;i<=5;i++) {
+            var rib = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.62, 2.47), material(THREE, 0x1a222a, { roughness: 0.9 }));
+            rib.position.x = i * 1.0; group.add(rib);
+        }
+        var doors = new THREE.Mesh(new THREE.BoxGeometry(0.05, 2.4, 2.3), material(THREE, 0x2a3340, { roughness: 0.7, metalness: 0.4 }));
+        doors.position.x = 6.02; group.add(doors);
+        parent.add(group);
     }
 
     function addTree(THREE, parent, x, z, scale, trunkColor, leafColor) {
@@ -135,13 +173,20 @@
         addMountain(THREE, decor, 250, 65, 95, 90, 0x3c5868);
 
         addLandingPad(THREE, decor);
+        // Liftoff bando freestyle additions
+        addWarehouse(THREE, decor, -42, 38, 22, 16, 9, 0xc2b8a3);
+        addWarehouse(THREE, decor, 58, -42, 20, 14, 8, 0xb9c0c9);
+        addContainer(THREE, decor, -8, 18, 0.32, 0xd94a3a);
+        addContainer(THREE, decor, -6, 20.6, 0.32, 0x2f7d62);
+        addContainer(THREE, decor, 28, -18, -0.45, 0x3a6ea5);
+        addContainer(THREE, decor, -34, -26, 0.78, 0xe2b84d);
 
         var gateSpecs = [
-            { x: 0, y: 1, z: -55, r: 0, c: 0x70f0d5 },
-            { x: 48, y: 4, z: -5, r: Math.PI / 2, c: 0xffc861 },
-            { x: -56, y: 7, z: 35, r: 0.2, c: 0xff7f9e },
-            { x: 72, y: 3, z: 74, r: -0.35, c: 0x86a8ff },
-            { x: -78, y: 5, z: 94, r: 0.5, c: 0xd6ff6f }
+            { x: 0, y: 0.6, z: -48, r: 0, c: 0x70f0d5 },
+            { x: 46, y: 3.2, z: 2, r: Math.PI / 2, c: 0xffc861 },
+            { x: -54, y: 6.5, z: 34, r: 0.18, c: 0xff7f9e },
+            { x: 70, y: 2.4, z: 74, r: -0.32, c: 0x86a8ff },
+            { x: -76, y: 4.2, z: 92, r: 0.48, c: 0xd6ff6f }
         ];
         gateSpecs.forEach(function (spec) {
             addNeonGate(THREE, decor, spec.x, spec.y, spec.z, spec.r, spec.c, mobile);
@@ -165,32 +210,25 @@
     }
 
     function addDroneDetails(droneGroup, THREE, mobile) {
-        var canopyMaterial = material(THREE, 0x101820, {
-            roughness: 0.2,
-            metalness: 0.8
+        var canopyMaterial = material(THREE, 0x0e1822, { roughness: 0.18, metalness: 0.82 });
+        var canopy = new THREE.Mesh(new THREE.SphereGeometry(0.27, mobile ? 10 : 14, 7), canopyMaterial);
+        canopy.scale.set(1.08, 0.52, 1.42); canopy.position.set(0, 0.17, 0.11); droneGroup.add(canopy);
+        var camHousing = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.15, 0.19), material(THREE, 0x293746, { roughness: 0.25, metalness: 0.72 }));
+        camHousing.position.set(0, 0.20, 0.44); droneGroup.add(camHousing);
+        var lens = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 12), new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.12, metalness: 0.9 }));
+        lens.rotation.x = Math.PI/2; lens.position.set(0, 0.20, 0.54); droneGroup.add(lens);
+        var ledMaterial = material(THREE, 0x6fffe2, { roughness: 0.2, emissive: 0x2aa890, emissiveIntensity: 2.0 });
+        var tailLedMat = material(THREE, 0xff4d5a, { roughness: 0.2, emissive: 0x9a1a22, emissiveIntensity: 1.7 });
+        [-0.58, 0.58].forEach(function (xPos) {
+            var led = new THREE.Mesh(new THREE.SphereGeometry(0.065, 7, 5), ledMaterial);
+            led.position.set(xPos, 0.12, 0.60); droneGroup.add(led);
         });
-        var canopy = new THREE.Mesh(new THREE.SphereGeometry(0.25, mobile ? 8 : 12, 6), canopyMaterial);
-        canopy.scale.set(1.05, 0.55, 1.35);
-        canopy.position.set(0, 0.17, 0.13);
-        droneGroup.add(canopy);
-
-        var cameraHousing = new THREE.Mesh(
-            new THREE.BoxGeometry(0.22, 0.14, 0.18),
-            material(THREE, 0x293746, { roughness: 0.28, metalness: 0.7 })
-        );
-        cameraHousing.position.set(0, 0.2, 0.42);
-        droneGroup.add(cameraHousing);
-
-        var ledMaterial = material(THREE, 0x6fffe2, {
-            roughness: 0.2,
-            emissive: 0x2aa890,
-            emissiveIntensity: 1.8
+        [-0.58, 0.58].forEach(function (xPos) {
+            var led = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 4), tailLedMat);
+            led.position.set(xPos, 0.12, -0.52); droneGroup.add(led);
         });
-        [-0.56, 0.56].forEach(function (xPos) {
-            var led = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 4), ledMaterial);
-            led.position.set(xPos, 0.13, 0.58);
-            droneGroup.add(led);
-        });
+        var ant = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.42, 6), material(THREE, 0x111111, { roughness: 0.9 }));
+        ant.position.set(0, 0.26, -0.22); ant.rotation.x = 0.35; droneGroup.add(ant);
     }
 
     window.FPVAssets = {

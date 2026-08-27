@@ -42,7 +42,7 @@ if /I "!SOURCE!"=="serial" (
     start "RC-N1C Dashboard" /min "%PY%" "%PROJECT%\viz_app\controller_viz.py" --gamepad --no-browser
 ) else (
     echo [OK] Nessun VCOM USB rilevato: avvio la sorgente UDP Wi-Fi.
-    start "RC-N1C Dashboard" /min "%PY%" "%PROJECT%\viz_app\controller_viz.py" --source udp --no-browser
+    start "RC-N1C Dashboard" /min "%PY%" "%PROJECT%\viz_app\controller_viz.py" --source udp --gamepad --no-browser
 )
 
 echo [4/4] Attendo la dashboard...
