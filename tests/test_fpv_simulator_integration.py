@@ -64,8 +64,8 @@ def test_simulator_stays_local_and_lightweight():
 
 def test_simulator_physics_has_stable_hover_and_real_ground_contact():
     html = (PC_SIM / 'index.html').read_text(encoding='utf-8')
-    # Liftoff-like 5" freestyle: hover 37%, TWR ~5.9, quadratic drag, fast fall, capped speed
-    assert 'hoverThrottle: 0.37' in html
+    # Hover stabile a centro stick (0.50) per RC-N1C senza molla sul gas: se lasci lo stick non sale.
+    assert 'hoverThrottle: 0.50' in html
     assert 'maxThrust: 58.0' in html
     assert 'dragCoeff: 0.008' in html
     assert 'fallAssist: 13.5' in html
@@ -135,7 +135,7 @@ def test_pc_simulator_has_stronger_throttle_and_local_drone_audio():
     html = (PC_SIM / 'index.html').read_text(encoding='utf-8')
     audio = (PC_SIM / 'drone-audio.js').read_text(encoding='utf-8')
     assert '<script src="drone-audio.js"></script>' in html
-    assert 'hoverThrottle: 0.37' in html
+    assert 'hoverThrottle: 0.50' in html
     assert 'maxThrust: 58.0' in html
     assert 'fallAssist: 13.5' in html
     assert 'dragCoeff: 0.008' in html

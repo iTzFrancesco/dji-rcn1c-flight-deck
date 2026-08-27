@@ -644,15 +644,15 @@
         }
 
         // --- 2. PHYSICS STATE --- Liftoff-like 5" freestyle (Betaflight Actual Rates)
-        // Hover ~37-38% like Liftoff/real 5", TWR ~5.9, quadratic drag, gravity 9.81.
-        // Tuned for punch and fast descent without floaty fall.
+        // Hover at 50% stick (plug-and-play con RC-N1C molla mancante sul gas),
+        // TWR ~5.9, quadratic drag, gravity 9.81. Se lasci lo stick al centro non sale.
         const physics = {
             position: new THREE.Vector3(0, 5, -120),
             velocity: new THREE.Vector3(0, 0, 0),
             gravity: 9.81,
-            hoverThrottle: 0.37,
+            hoverThrottle: 0.50,
             maxThrust: 58.0,      // Liftoff 5" TWR ~5.9 (weight 0.72kg -> 58 N)
-            throttleAuthority: 77.0, // (maxThrust-gravity)/(1-hover) ~76.8, explicit for tests
+            throttleAuthority: 96.4, // (maxThrust-gravity)/(1-hover) ~96.4, explicit for tests
             dragCoeff: 0.008,     // Quadratic: decel ~ coeff* speed^2, Liftoff-like
             fallAssist: 13.5,     // Progressive extra descent below hover, 0 throttle => ~23 m/s2 down
             maxSpeed: 48,         // Liftoff realistic cap ~44-48 m/s (158-173 km/h)
@@ -1878,12 +1878,12 @@
             droneGroup.rotateY(THREE.MathUtils.degToRad(yawRate * dt));
             droneGroup.rotateZ(THREE.MathUtils.degToRad(-rollRate * dt));
 
-            // Calculate thrust - Liftoff-like throttle curve with hover at hoverThrottle (~37%).
-            // Below hover: thrust scales linearly 0 -> gravity. Above hover: gravity -> maxThrust.
-            // This gives Liftoff hover ~37% stick, punch above, zero at bottom.
+            // Calculate thrust - Liftoff-like throttle curve con hover a 50% stick
+            // (RC-N1C throttle senza molla: centro = hover stabile, non sale).
+            // Sotto hover: thrust 0 -> gravity. Sopra hover: gravity -> maxThrust.
             const throttleInput = THREE.MathUtils.clamp(Number(rawThrottle) || 0, -1, 1);
             const throttle01 = (throttleInput + 1) / 2;
-            const hover = physics.hoverThrottle || 0.37;
+            const hover = physics.hoverThrottle || 0.50;
             let thrustMagnitude;
             if (throttle01 >= hover) {
                 const scale = (physics.maxThrust - physics.gravity) / (1 - hover);
