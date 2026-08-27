@@ -2212,7 +2212,8 @@
                 rawRoll = -directInput.roll;
                 rawPitch = directInput.pitch;
                 rawYaw = -directInput.yaw;
-                rawThrottle = directInput.throttle;
+                // Throttle RC-N1C: stick giu = raw +1 (1684) -> deve essere thrust 0, quindi inverto
+                rawThrottle = -directInput.throttle;
                 hasInput = true;
             }
 
