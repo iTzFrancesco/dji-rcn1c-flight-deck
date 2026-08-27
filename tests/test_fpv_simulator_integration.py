@@ -128,6 +128,11 @@ def test_pc_simulator_is_fullscreen_plug_and_play():
     assert 'droneGroup.visible = false;' in html
     assert 'rawRoll = -directInput.roll;' in html
     assert 'rawYaw = -directInput.yaw;' in html
+    assert 'rawThrottle = directInput.throttle;' in html
+    assert 'const CONFIG_VERSION = 4;' in html
+    assert 'id="roll-center" value="100"' in html
+    assert 'id="roll-max" value="900"' in html
+    assert 'id="roll-expo" value="0.15"' in html
     assert 'function armMotorAudio()' in html
 
 

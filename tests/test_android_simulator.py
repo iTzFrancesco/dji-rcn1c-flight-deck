@@ -89,11 +89,16 @@ def test_simulator_bridge_runtime_fails_safe_when_rc_is_absent_or_detached():
         vm.runInThisContext(fs.readFileSync('wireless/android-app/assets/fpv-sim/simulator-bridge.js', 'utf8'));
         assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [0, 1, 0, 0]);
         window.setRcn1cFrame(32767, -32767, 16384, -16384, 0x0080, 1, 120.0);
-        assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [1, 1, 0.500015259254738, 0.500015259254738]);
+        assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [1, -1, 0.500015259254738, 0.500015259254738]);
         window.setRcn1cFrame(364, 1684, 1024, 1024, 0, 1, 120.0);
-        assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [-1, -1, 0, 0]);
+        assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [-1, 1, 0, 0]);
         assert.deepStrictEqual(window.getRcn1cFlightControls(), {
-          connected: true, yaw: -1, throttle: 1, roll: 0, pitch: 0
+          connected: true, yaw: -1, throttle: -1, roll: 0, pitch: 0
+        });
+        window.setRcn1cFrame(1024, 364, 1024, 1024, 0, 1, 120.0);
+        assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [0, -1, 0, 0]);
+        assert.deepStrictEqual(window.getRcn1cFlightControls(), {
+          connected: true, yaw: 0, throttle: 1, roll: 0, pitch: 0
         });
         window.setRcn1cStatus('RC scollegato', false);
         assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [0, 1, 0, 0]);
