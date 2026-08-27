@@ -516,23 +516,23 @@
 
         <div class="control-group">
             <h3>Roll</h3>
-            <div class="input-row"><label>Center Sens</label><input type="number" id="roll-center" value="70"></div>
-            <div class="input-row"><label>Max Rate</label><input type="number" id="roll-max" value="670"></div>
-            <div class="input-row"><label>Expo</label><input type="number" id="roll-expo" value="0.55" step="0.01"></div>
+            <div class="input-row"><label>Center Sens</label><input type="number" id="roll-center" value="100"></div>
+            <div class="input-row"><label>Max Rate</label><input type="number" id="roll-max" value="900"></div>
+            <div class="input-row"><label>Expo</label><input type="number" id="roll-expo" value="0.15" step="0.01"></div>
         </div>
 
         <div class="control-group">
             <h3>Pitch</h3>
-            <div class="input-row"><label>Center Sens</label><input type="number" id="pitch-center" value="70"></div>
-            <div class="input-row"><label>Max Rate</label><input type="number" id="pitch-max" value="670"></div>
-            <div class="input-row"><label>Expo</label><input type="number" id="pitch-expo" value="0.55" step="0.01"></div>
+            <div class="input-row"><label>Center Sens</label><input type="number" id="pitch-center" value="100"></div>
+            <div class="input-row"><label>Max Rate</label><input type="number" id="pitch-max" value="900"></div>
+            <div class="input-row"><label>Expo</label><input type="number" id="pitch-expo" value="0.15" step="0.01"></div>
         </div>
 
         <div class="control-group">
             <h3>Yaw</h3>
-            <div class="input-row"><label>Center Sens</label><input type="number" id="yaw-center" value="70"></div>
-            <div class="input-row"><label>Max Rate</label><input type="number" id="yaw-max" value="670"></div>
-            <div class="input-row"><label>Expo</label><input type="number" id="yaw-expo" value="0.55" step="0.01"></div>
+            <div class="input-row"><label>Center Sens</label><input type="number" id="yaw-center" value="100"></div>
+            <div class="input-row"><label>Max Rate</label><input type="number" id="yaw-max" value="900"></div>
+            <div class="input-row"><label>Expo</label><input type="number" id="yaw-expo" value="0.15" step="0.01"></div>
         </div>
 
         <div style="margin-top: auto;">
@@ -620,7 +620,7 @@
         // ============================================================
 
         // --- 1. STATE & CONFIGURATION ---
-        const CONFIG_VERSION = 3;
+        const CONFIG_VERSION = 4;
         let config = {
             mapping: {
                 roll: { axis: 2, invert: true },
@@ -2212,8 +2212,8 @@
                 rawRoll = -directInput.roll;
                 rawPitch = directInput.pitch;
                 rawYaw = -directInput.yaw;
-                // Throttle RC-N1C: stick giu = raw +1 (1684) -> deve essere thrust 0, quindi inverto
-                rawThrottle = -directInput.throttle;
+                // Il bridge espone gia il throttle nel verso canonico: su = positivo.
+                rawThrottle = directInput.throttle;
                 hasInput = true;
             }
 

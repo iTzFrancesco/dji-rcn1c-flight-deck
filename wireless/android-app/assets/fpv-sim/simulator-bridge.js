@@ -61,7 +61,7 @@
             return;
         }
         fakeGamepad.axes[0] = state.lx;     // yaw
-        fakeGamepad.axes[1] = invertedAxis(state.ly); // throttle, HID Y direction
+        fakeGamepad.axes[1] = state.ly;              // throttle source; simulator mapping inverts once
         fakeGamepad.axes[2] = state.rx;     // roll
         fakeGamepad.axes[3] = invertedAxis(state.ry); // pitch, HID Y direction
         fakeGamepad.timestamp = typeof performance !== 'undefined'
@@ -100,7 +100,9 @@
         return {
             connected: state.connected,
             yaw: state.lx,
-            throttle: state.ly,
+            // RC-N1C reports upper throttle as the negative normalized LY direction.
+            // Expose the simulator-facing convention: stick up = positive throttle.
+            throttle: invertedAxis(state.ly),
             roll: state.rx,
             pitch: state.ry
         };
