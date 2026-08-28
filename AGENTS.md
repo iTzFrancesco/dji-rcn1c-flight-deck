@@ -1,133 +1,125 @@
-# AGENTS.md — Progetto Drone (DJI Mini 4K + RC-N1C)
+# AGENTS.md — Drone Project (DJI Mini 4K + RC-N1C)
 
-Setup per pilotare simulatori di drone con il radiocomando reale DJI RC-N1C collegato al PC via USB.
+Guidance for using the real **DJI RC-N1C** remote controller with drone flight simulators on Windows and Android.
 
-## Hardware / ambiente
+## Hardware and environment
 
-- PC: i5-11600K, AMD RX 6500 XT 4GB, 16GB RAM, Windows 11 Pro
-- Radiocomando: **DJI RC-N1C** (del DJI Mini 4K), Mode 2
-- Collegamento: porta USB-C **INFERIORE** del radiocomando (quella di ricarica) → PC.
-  La porta SUPERIORE serve solo per il telefono, non usarla.
-- Porte COM quando connesso: `DEVICE USB VCOM For Protocol (COM4)` = dati stick, `DEVICE USB VCOM For Debug (COM5)` = debug
-- Python: `%LOCALAPPDATA%\Programs\Python\Python312\python.exe` (pacchetti installati: pyserial, vgamepad, websockets, python-dotenv, colorama)
-- Driver **ViGEmBus** installato (gamepad Xbox virtuale)
+- A Windows PC with Python 3.12.
+- A **DJI RC-N1C** remote controller (DJI Mini 4K), configured for Mode 2.
+- A powered-on remote controller connected with a USB-C data cable. Use the **lower** USB-C port on the remote controller; the upper port is intended for the phone connection.
+- The remote controller exposes separate VCOM ports for protocol data and debugging. Identify the assigned protocol port instead of assuming a fixed COM number.
+- Python packages: `pyserial`, `vgamepad`, `websockets`, `python-dotenv`, and `colorama`.
+- The **ViGEmBus** driver for the virtual Xbox controller.
 
-## Protocollo seriale RC-N1C (verificato sul campo)
+## RC-N1C serial protocol (field-verified)
 
-- Baud 921600, 8N1 (il VCOM sembra ignorare il baud ma usare quello alto)
-- Richiesta: inviare esadecimale `55 0d 04 33 0a 06 eb 34 40 06 01 74 24` (risposta request/response: ~1 pacchetto per richiesta)
-- Risposta: pacchetti che iniziano con `0x55`, poi 2 byte little-endian di cui i 10 bit bassi = lunghezza pacchetto
-- Pacchetto posizione stick: lunghezza **38 byte**
-  - offset 13–14: RX (stick destro X)
-  - offset 16–17: RY (stick destro Y)
-  - offset 19–20: LY (stick sinistro Y)
-  - offset 22–23: LX (stick sinistro X)
-  - offset 25–26: rotella camera (dial)
-  - byte 28 bit0 "Fn": NON confermato su RC-N1C Mini 4K (sonda v3: nessuna variazione)
-- Valori: little-endian, range **364..1684**, centro **1024**
-- Mappatura Mode 2: sinistro = throttle/yaw (il throttle NON torna da solo verticalmente), destro = pitch/roll
+- Baud rate: 921600, 8N1. The VCOM may ignore the baud rate, but the high setting should still be used.
+- Request: send the hexadecimal sequence `55 0d 04 33 0a 06 eb 34 40 06 01 74 24` (request/response flow: approximately one packet per request).
+- Responses start with `0x55`; the next two bytes are little-endian, and the lower 10 bits contain the packet length.
+- Stick-position packet length: **38 bytes**.
+  - Offsets 13–14: RX (right-stick X)
+  - Offsets 16–17: RY (right-stick Y)
+  - Offsets 19–20: LY (left-stick Y)
+  - Offsets 22–23: LX (left-stick X)
+  - Offsets 25–26: camera wheel (dial)
+  - Bit 0 of byte 28, labelled `Fn`, is not confirmed on the RC-N1C Mini 4K; probe v3 showed no change.
+- Values are little-endian, range **364..1684**, center **1024**.
+- Mode 2 mapping: the left stick controls throttle/yaw (throttle does **not** return to center vertically); the right stick controls pitch/roll.
 
-## File
+## Files
 
-| Percorso | Scopo |
+| Path | Purpose |
 |---|---|
-| `dji_rcn1c_bridge.py` | Bridge RC → gamepad Xbox 360 virtuale (ViGEm). Avvio infinito o `--duration N` |
-| `AVVIA_BRIDGE.bat` | Lanciatore del bridge per uso quotidiano (doppio click) |
-| `registra_volo.py` | Registratore sessioni FPV: schermo via ffmpeg (H264, CRF 18, OSD REC mm:ss.mmm inciso, watchdog antiblocco per sessioni lunghe fino a 30+ min) + log XInput 100 Hz del gamepad virtuale in `registrazioni/` (mp4+csv+json sincronizzati, con processo in primo piano per filtrare il volo reale). `--duration N`, `--log-only`, `--no-osd`, `--window Titolo`, `--crf`, `--fps`. Espone anche la classe `Recorder` usata dalla dashboard. Docs: `registrazioni/AGENTS.md` |
-| `analizza_volo.py` | Analizzatore sessioni: analizza **tutto** — 100% log e 100% video (nessun secondo saltato): storyboard del giro + eventi con frame prima/durante/dopo. `python analizza_volo.py [volo_…] [--every 3]` → `registrazioni/analisi_volo_…/report.html` |
-| `AVVIA_REGISTRAZIONE.bat` | Lanciatore del registratore voli (doppio click, ferma con Q+Invio) |
-| `wireless/rcn1c_phone_tx.py` | Lato TELEFONO (Termux): legge la seriale USB dell'RC e inoltra stick+rotella+tasti via UDP al PC |
-| `wireless/button_probe_27.py` | Sonda guidata del frame pulsanti DUML 0x27 con report dei mapping |
-| `wireless/button_live_probe.py` | Monitor live del frame pulsanti DUML 0x27, senza gamepad virtuale |
-| `rcn1c_protocol.py` | Costanti e decoder condivisi per stick, pulsanti e modalità |
-| `rcn1c_transport.py` | Formato UDP v1/v2/v3 tra Android/Termux e PC |
-| `wireless/RCN1C_Bridge.apk` | **App Android pronta da installare** (v3.0): USB seriale + pulsanti/mode live + autodiscovery UDP |
-| `wireless/android-app/` | Sorgenti dell'app (Java) + `build_apk.ps1` per ricompilare l'APK |
-| `wireless/rcn1c_wifi_rx_pc.py` | Ricevente PC: UDP :26789 → gamepad Xbox virtuale (stick + rotella + tasti) |
-| `tests/run_all.py` | Suite completa: py_compile + test ricevente/dashboard (`python tests\run_all.py`, atteso TUTTI_PASS) |
-| `AVVIA_WIFI_BRIDGE.bat` | Lanciatore della ricevente WiFi (doppio click) |
-| **Desktop: `RC-N1C Dashboard.vbs`** | Doppio click → console server + Chrome sulla dashboard (chiude/riavvia da solo) |
-| `sandbox_read_test.py` | Diagnostica seriale guidata in 4 fasi (stick sx, dx, rotella, centro) |
-| `viz_app/controller_viz.py` | Server Control Center: seriale (`--source serial`, default) o WiFi (`--source udp`, include gamepad virtuale) + HTTP :8123 + WebSocket :8124 + API registrazione (`/api/rec/start|stop|status`, pulsante REC nella dashboard con OSD rosso) |
-| `viz_app/AVVIA_VIZ_WIFI.bat` | Lanciatore della dashboard in modalità wireless |
-| `viz_app/static/index.html` | Dashboard real-time Flight Deck: stick pad, matrice pulsanti, modalità, banda, console DUML TX/RX |
-| `viz_app/test_viz.py` | Self-test: HTTP 200 + handshake WS hello/snapshot + contatore pacchetti |
-| `viz_app/AVVIA_VIZ.bat` | Lanciatore della dashboard |
-| `DJI_RCN1_bridge/` | Repo originale clonato: github.com/pverhaert/DJI_RCN1_for_drone_simulators |
+| `dji_rcn1c_bridge.py` | RC → virtual Xbox 360 gamepad bridge through ViGEm. Runs indefinitely or with `--duration N`. |
+| `AVVIA_BRIDGE.bat` | Daily launcher for the bridge. |
+| `registra_volo.py` | FPV session recorder: FFmpeg screen capture (H.264, CRF 18, embedded `REC mm:ss.mmm` OSD, watchdog for long sessions) plus 100 Hz XInput logging in `registrazioni/` (synchronised MP4, CSV, and JSON). Supports `--duration N`, `--log-only`, `--no-osd`, `--window <title>`, `--crf`, and `--fps`; also exposes the `Recorder` class used by the dashboard. See `registrazioni/AGENTS.md`. |
+| `analizza_volo.py` | Session analyser that processes the complete log and video: lap storyboard plus events with frames before, during, and after each event. `python analizza_volo.py [session] [--every 3]` writes `registrazioni/analisi_volo_<timestamp>/report.html`. |
+| `AVVIA_REGISTRAZIONE.bat` | Flight-recorder launcher; stop with `Q` followed by Enter. |
+| `wireless/rcn1c_phone_tx.py` | Phone-side Termux script: reads the RC USB serial connection and forwards sticks, wheel, and buttons to the PC over UDP. |
+| `wireless/button_probe_27.py` | Guided probe for the DUML `0x27` button frame with a mapping report. |
+| `wireless/button_live_probe.py` | Live monitor for the DUML `0x27` button frame without creating a virtual gamepad. |
+| `rcn1c_protocol.py` | Shared constants and decoders for sticks, buttons, and flight modes. |
+| `rcn1c_transport.py` | UDP v1/v2/v3 transport format between Android/Termux and the PC. |
+| `wireless/RCN1C_Bridge.apk` | Ready-to-install Android app (v3.0): USB serial input, live buttons/mode, and UDP autodiscovery. |
+| `wireless/android-app/` | Android app source (Java) and `build_apk.ps1` build script. |
+| `wireless/rcn1c_wifi_rx_pc.py` | PC receiver: UDP port 26789 → virtual Xbox gamepad (sticks, wheel, and buttons). |
+| `tests/run_all.py` | Full test suite: `py_compile` plus receiver/dashboard tests (`python tests\\run_all.py`; the suite should pass). |
+| `AVVIA_WIFI_BRIDGE.bat` | Wi-Fi receiver launcher. |
+| **Desktop: `RC-N1C Dashboard.vbs`** | One-click launcher for the server console and Chrome dashboard; it closes and restarts the components as needed. |
+| `sandbox_read_test.py` | Four-stage guided serial diagnostic (left stick, right stick, wheel, and center). |
+| `viz_app/controller_viz.py` | Control Center server: serial (`--source serial`, default) or Wi-Fi (`--source udp`, including the virtual gamepad), HTTP on port 8123, WebSocket on port 8124, and recording API (`/api/rec/start|stop|status`, with red REC OSD in the dashboard). |
+| `viz_app/AVVIA_VIZ_WIFI.bat` | Wireless dashboard launcher. |
+| `viz_app/static/index.html` | Real-time Flight Deck dashboard: stick pads, button matrix, flight mode, bandwidth, and DUML TX/RX console. |
+| `viz_app/test_viz.py` | Self-test: HTTP 200, WebSocket `hello`/snapshot handshake, and packet counter. |
+| `viz_app/AVVIA_VIZ.bat` | Dashboard launcher. |
+| `DJI_RCN1_bridge/` | Original upstream bridge source. |
 
-## Modalità wireless (telefono come ponte USB↔WiFi)
+## Wireless mode (phone as a USB-to-Wi-Fi bridge)
 
-L'RC-N1C non ha WiFi/BT verso il PC: l'unico modo senza fili è usare il telefono come ponte.
-Catena: RC → cavo dati USB-C → telefono → UDP :26789 → PC → gamepad virtuale. Il frame v3 trasporta stick, rotella, pulsanti e modalità.
+The RC-N1C does not provide a direct Wi-Fi or Bluetooth connection to the PC. For wireless use, the phone acts as the bridge:
 
-**Metodo 1 — App Android (consigliato)**: installa `wireless/RCN1C_Bridge.apk` (v3.0, orizzontale)
-sul telefono e collega l'RC acceso via USB-C alla porta **INFERIORE** (verificato: è la porta
-dati seriale, stessa scelta di tutti i progetti bridge; la porta SUPERIORE è dedicata a DJI Fly
-e non espone il VCOM). Consenti USB; lascia l'IP vuoto per l'autodiscovery oppure inseriscilo a mano.
-L'app mostra stick, pulsanti, modalità, pkt/s e RTT. Sul PC avvia `AVVIA_WIFI_BRIDGE.bat`, oppure
-`viz_app\AVVIA_VIZ_WIFI.bat` per avere dashboard + gamepad in un solo processo (NON insieme ad
-AVVIA_WIFI_BRIDGE.bat). Ricompilare l'app: `wireless/android-app/build_apk.ps1`
-(SDK in `%LOCALAPPDATA%\Android\Sdk`).
+`RC → USB-C data cable → phone → UDP port 26789 → PC → virtual gamepad`
 
-**Metodo 2 — Termux**: installa **Termux** e **Termux:API** da F-Droid, poi `pkg install python termux-api`.
-1. Collega il radiocomando acceso al telefono con cavo dati USB-C e consenti USB.
+The v3 frame carries sticks, wheel, buttons, and flight mode.
+
+**Method 1 — Android app (recommended):** install `wireless/RCN1C_Bridge.apk` (v3.0, landscape orientation) on the phone and connect the powered-on RC through the **lower** USB-C port. Grant USB permission. Leave the IP field empty for autodiscovery or enter it manually. The app shows sticks, buttons, flight mode, packet rate, and RTT. On the PC, launch `AVVIA_WIFI_BRIDGE.bat`, or use `viz_app\\AVVIA_VIZ_WIFI.bat` to run the dashboard and virtual gamepad in one process. Do **not** run both receivers at the same time. Rebuild the app with `wireless/android-app/build_apk.ps1` after configuring the Android SDK.
+
+**Method 2 — Termux:** install **Termux** and **Termux:API** from F-Droid, then run `pkg install python termux-api`.
+
+1. Connect the powered-on remote controller to the phone with a data-capable USB-C cable and grant USB permission.
 2. In Termux:
    ```bash
-   termus-usb -l                                  # annota il percorso es. /dev/bus/usb/002/003
-   termus-usb -r /dev/bus/usb/002/003
-   termus-usb -E -e "python rcn1c_phone_tx.py IP_DEL_PC" /dev/bus/usb/002/003
+   termux-usb -l                                  # note the path, for example /dev/bus/usb/002/003
+   termux-usb -r /dev/bus/usb/002/003
+   termux-usb -E -e "python rcn1c_phone_tx.py PC_IP_ADDRESS" /dev/bus/usb/002/003
    ```
-3. Sul PC: doppio click `AVVIA_WIFI_BRIDGE.bat` (o avvia `wireless/rcn1c_wifi_rx_pc.py`).
+3. On the PC, launch `AVVIA_WIFI_BRIDGE.bat` or run `wireless/rcn1c_wifi_rx_pc.py`.
 
-Note: IP del PC con `ipconfig`; PC e telefono sulla stessa rete; se non arriva nulla consentire
-Python nel firewall Windows (reti private). Latenza ~5-15ms in più vs USB. La chiavetta WiFi
-serve solo a collegare il PC alla rete, non parla col radiocomando. Frame UDP v3 (18 byte): `<IHHHHHHBB`
-(seq + RX/RY/LY/LX + rotella + mask pulsanti + mode + flags); i receiver accettano anche v1/v2.
-Sul nostro RC-N1C il frame DUML `0x27` da 58 byte espone `0x0060` scatto/registrazione,
-`0x0004` foto/video, `0x0080` RTH/STOP e `0x0002` FN; `0x3000` indica Sport/Normal/Cine.
-Rotella → A/B (soglia ±99). CSC stick → LB/RB.
-Auto-discovery: broadcast `RCN1C_DISC` su :26790 → risposta `RCN1C_HERE`
-(l'app con campo IP vuoto trova il PC da sola). Tutti i receiver bloccano il primo mittente UDP
-(anti-iniezione LAN).
+The PC and phone must be on the same network. If no packets arrive, allow Python through the Windows firewall on private networks. Wireless adds approximately 5–15 ms over USB. The Wi-Fi adapter only connects the PC to the network; it does not communicate with the remote controller directly.
 
-## Comandi
+UDP v3 is 18 bytes: `<IHHHHHHBB` (sequence + RX/RY/LY/LX + wheel + button mask + mode + flags). Receivers also accept v1/v2.
+
+On the RC-N1C, the 58-byte DUML `0x27` frame exposes `0x0060` shutter/recording, `0x0004` photo/video, `0x0080` RTH/STOP, and `0x0002` FN; `0x3000` indicates Sport/Normal/Cine. The wheel maps to A/B beyond a ±99 threshold. CSC stick input maps to LB/RB.
+
+Autodiscovery uses the broadcast `RCN1C_DISC` on port 26790 and the `RCN1C_HERE` response. When the app's IP field is empty, it finds the PC automatically. All receivers lock to the first UDP sender to reduce LAN injection risk.
+
+## Commands
 
 ```powershell
-$py = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
-& $py dji_rcn1c_bridge.py              # bridge verso i simulatori
-& $py registra_volo.py                 # registra volo: video + dati stick (Q+Invio per fermare)
-& $py registra_volo.py --duration 1800 --crf 20  # 30 min con file più leggero
-& $py analizza_volo.py                    # analizza l'ultima sessione (tutto, nessuno escluso)
-& $py analizza_volo.py volo_20260825_135434 --every 2  # copertura più fitta → report.html
-& $py sandbox_read_test.py             # test guidato del radiocomando
-& $py viz_app/controller_viz.py        # dashboard (seriale USB, apre il browser da sola)
-& $py viz_app/controller_viz.py --source udp   # dashboard + gamepad via ponte WiFi
-& $py viz_app/test_viz.py              # self-test (atteso: SELFTEST_PASS)
+py -3.12 dji_rcn1c_bridge.py              # bridge for simulators
+py -3.12 registra_volo.py                 # record video and stick data (Q + Enter to stop)
+py -3.12 registra_volo.py --duration 1800 --crf 20  # 30 minutes with a smaller file
+py -3.12 analizza_volo.py                 # analyse the latest session completely
+py -3.12 analizza_volo.py session_name --every 2    # denser coverage → report.html
+py -3.12 sandbox_read_test.py             # guided remote-controller test
+py -3.12 viz_app/controller_viz.py        # dashboard (USB serial, opens the browser)
+py -3.12 viz_app/controller_viz.py --source udp   # dashboard + gamepad through Wi-Fi bridge
+py -3.12 viz_app/test_viz.py              # self-test (expected to pass)
 ```
 
-## Gotcha importanti
+## Important caveats
 
-- **Un solo processo alla volta può aprire COM4**: chiudi il bridge prima di avviare la dashboard e viceversa. **DJI Assistant 2 va chiuso** (tiene occupata la porta).
-- In modalità WiFi vale lo stesso principio sulla porta UDP 26789: un solo receiver (AVVIA_WIFI_BRIDGE.bat OPPURE AVVIA_VIZ_WIFI.bat, mai entrambi).
-- La dashboard si riconnette da sola ogni 2s se il radiocomando è spento/scollegato (overlay "In attesa").
-- Rotella camera → pulsanti A/B virtuali oltre soglia ±15% dal centro (può cambiare schermate/focus in Windows: è normale).
-- Il bridge pubblica un controller "XBOX 360 For Windows": nei giochi selezionare quello nelle impostazioni comandi.
-- Se gli input sembrano limitati (~30 pkt/s) verificare di non avere altri consumer sulla porta e baud alto impostato.
-- `registra_volo.py` legge il gamepad via XInput: NON blocca COM4 né la porta UDP, si può usare insieme a bridge e dashboard. Se il video esce nero, Liftoff è in fullscreen esclusivo: passa a "finestra senza bordi". Avvia il bridge prima di registrare, altrimenti il log stick è a zero. L'OSD REC inciso sui frame coincide con `t_s` del CSV. Le analisi con `analizza_volo.py` coprono sempre tutto (ogni riga di log e ogni secondo di video, nessuno escluso).
+- Only one process at a time can open the protocol VCOM port. Close the bridge before starting the dashboard, and vice versa. **DJI Assistant 2 must also be closed** if it is holding the port.
+- The same rule applies to UDP port 26789 in Wi-Fi mode: run either `AVVIA_WIFI_BRIDGE.bat` or `AVVIA_VIZ_WIFI.bat`, never both.
+- The dashboard reconnects automatically every two seconds when the remote controller is powered off or disconnected and shows an “Idle” overlay.
+- The camera wheel maps to virtual A/B buttons beyond approximately ±15% from center; this can change Windows focus or screens and is expected.
+- The bridge publishes an `XBOX 360 For Windows` controller. Select that controller in the simulator's input settings.
+- If input is limited to approximately 30 packets per second, check for other consumers on the port and verify that the high baud rate is configured.
+- `registra_volo.py` reads the gamepad through XInput and does not lock the serial or UDP input. If the video is black, switch the simulator from exclusive fullscreen to borderless windowed mode. Start the bridge before recording, otherwise the stick log will contain zeros. The embedded REC OSD matches `t_s` in the CSV. Analyses cover every CSV row and every video second.
 
-## Simulatore consigliato
+## Recommended simulator
 
-**Liftoff FPV Drone Racing** (Steam ~25€): gira bene su RX 6500 XT, ha Angle mode (= modalità normale Mini 4K) e Acro (= FPV), centinaia di mappe gratuite su Steam Workshop. Configurazione: Options → Controls → selezionare "Controller (XBOX 360 For Windows)", deadzone ~2%.
+**Liftoff FPV Drone Racing** is a recommended simulator for this project. It supports Angle mode (similar to the normal mode of camera drones) and Acro mode (FPV), with additional maps available through the Steam Workshop. Configure it under Options → Controls by selecting `Controller (XBOX 360 For Windows)` and using a small deadzone, such as approximately 2%.
 
-## Convenzioni progetto
+## Project conventions
 
-- Lingua UI e documentazione: italiano
-- Nessun dato lascia il PC: tutto bind su 127.0.0.1 (eccezione: receiver UDP in modalità wireless su 0.0.0.0 per ricevere dal telefono)
-- Dashboard senza CDN/risorse esterne (funziona offline)
-- Codice senza commenti superflui; docstring solo dove aiutano l'uso
+- Keep new and updated project documentation in English. Preserve current UI labels exactly when referring to buttons shown by the app.
+- By default, no data leaves the PC: services bind to `127.0.0.1`, except the Wi-Fi receiver, which binds to `0.0.0.0` to receive packets from the phone.
+- The dashboard must work offline without CDN or external resources.
+- Avoid unnecessary code comments; add docstrings only when they improve usage or maintenance.
 
-## Regola release Android e auto-update
+## Android releases and auto-update
 
-- A ogni release Android incrementare `versionCode` e `versionName`, ricompilare l'APK con la firma stabile e verificare l'asset pubblicato.
-- L'app controlla `releases/latest`: la release destinata all'auto-update non deve restare una prerelease. Dopo il workflow GitHub verificare che la nuova release sia **Latest** (`prerelease=false`, `make_latest=true`).
-- Controllare con `gh api repos/iTzFrancesco/dji-rcn1c-flight-deck/releases/latest` che vengano restituiti il nuovo tag e `RCN1C_Bridge.apk`.
+- For every Android release, increment `versionCode` and `versionName`, rebuild the APK with the stable signing configuration, and verify the published asset.
+- The app checks `releases/latest`. The release used for auto-update must not remain a prerelease. After the GitHub workflow completes, verify that the new release is marked **Latest** (`prerelease=false`, `make_latest=true`).
+- Verify the latest release through the repository's GitHub API endpoint, for example `gh api repos/OWNER/REPOSITORY/releases/latest`, and confirm that it returns the new tag and `RCN1C_Bridge.apk`.

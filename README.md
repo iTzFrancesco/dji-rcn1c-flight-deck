@@ -1,107 +1,106 @@
 # DJI RC-N1C Flight Deck
 
-Bridge open source non ufficiale per usare il radiocomando **DJI RC-N1C** con simulatori di volo su PC e Android.
+Unofficial open-source bridge for using the **DJI RC-N1C** remote controller with flight simulators on PC and Android.
 
-> Il repository/progetto si chiama **Flight Deck**; l'app Android si chiama **RC-N1C Flight Bridge**.
+> The repository/project is called **Flight Deck**; the Android app is called **RC-N1C Flight Bridge**.
 
-Il progetto offre:
+The project provides:
 
-- controller Xbox 360 virtuale tramite ViGEmBus su Windows;
-- lettura degli stick, della rotella e dei pulsanti fisici;
-- dashboard real-time con stato della connessione, modalità e qualità del segnale;
-- collegamento wireless tramite Android o Termux;
-- app Android per inviare il radiocomando al PC via Wi-Fi e visualizzare la dashboard;
-- autodetection della porta USB e del PC nella rete locale;
-- build automatica dell'app Android tramite GitHub Actions.
+- a virtual Xbox 360 controller through ViGEmBus on Windows;
+- input from the sticks, camera wheel, and physical buttons;
+- a real-time dashboard showing connection status, flight mode, and signal quality;
+- wireless connectivity through Android or Termux;
+- an Android app that sends the remote controller input to the PC over Wi-Fi and displays the dashboard;
+- automatic detection of the USB port and the PC on the local network;
+- automated Android app builds through GitHub Actions.
 
-## Controlli supportati
+## Supported controls
 
-| Controllo RC-N1C | Input virtuale |
+| RC-N1C control | Virtual input |
 | --- | --- |
-| Stick sinistro | LX / LY |
-| Stick destro | RX / RY |
-| Rotella camera | A / B |
-| Scatto / registrazione | Y |
-| Selettore foto/video | BACK |
+| Left stick | LX / LY |
+| Right stick | RX / RY |
+| Camera wheel | A / B |
+| Shutter / recording | Y |
+| Photo/video selector | BACK |
 | RTH / STOP | START |
 | FN | X |
-| Sport / Normal / Cine | Stato della dashboard |
+| Sport / Normal / Cine | Dashboard status |
 
-## Avvio su Windows
+## Getting started on Windows
 
-Requisiti:
+Requirements:
 
-- Windows con Python 3.12;
-- pacchetti Python `pyserial`, `vgamepad` e `websockets`;
-- driver ViGEmBus;
-- radiocomando acceso collegato tramite un cavo USB-C dati.
+- Windows with Python 3.12;
+- the Python packages `pyserial`, `vgamepad`, and `websockets`;
+- the ViGEmBus driver;
+- a powered-on remote controller connected with a USB-C data cable.
 
-Chiudi eventuali applicazioni DJI che possono occupare la connessione USB, poi usa uno dei launcher:
+Close any DJI applications that may be using the USB connection, then use one of the launchers:
 
-- `AVVIA_BRIDGE.bat` — avvia il controller virtuale per i simulatori;
-- `viz_app\AVVIA_VIZ.bat` — apre la dashboard e rileva automaticamente il radiocomando;
-- `AVVIA_BUTTON_LIVE_PROBE.bat` — mostra i pulsanti rilevati senza creare un gamepad.
+- `AVVIA_BRIDGE.bat` — starts the virtual controller for simulators;
+- `viz_app\AVVIA_VIZ.bat` — opens the dashboard and automatically detects the remote controller;
+- `AVVIA_BUTTON_LIVE_PROBE.bat` — displays detected buttons without creating a gamepad.
 
-Il collegamento `RC-N1C Dashboard.vbs` sul Desktop è il launcher con un click: rileva USB o Wi-Fi,
-apre la dashboard e crea automaticamente il controller Xbox virtuale. In modalità USB usa un solo
-processo, così la porta COM4 non viene aperta contemporaneamente da dashboard e bridge.
+The `RC-N1C Dashboard.vbs` Desktop shortcut is the one-click launcher: it detects USB or Wi-Fi,
+opens the dashboard, and automatically creates the virtual Xbox controller. In USB mode it uses a single
+process, so the protocol serial port is not opened simultaneously by the dashboard and the bridge.
 
-La dashboard è locale e non utilizza servizi o risorse esterne.
+The dashboard runs locally and does not use external services or resources.
 
 ## Demo
 
-[![Anteprima della dashboard RC-N1C Flight Deck](docs/media/flight-deck-demo.gif)](docs/media/flight-deck-demo.mp4)
+[![RC-N1C Flight Deck dashboard preview](docs/media/flight-deck-demo.gif)](docs/media/flight-deck-demo.mp4)
 
-Clicca sull’anteprima per aprire la registrazione completa.
+Click the preview to open the full recording.
 
-## App Android: RC-N1C Flight Bridge
+## Android app: RC-N1C Flight Bridge
 
-L'APK offre il bridge PC via Wi-Fi con dashboard real-time:
+The APK provides a Wi-Fi bridge to the PC with a real-time dashboard:
 
 ```text
 PC BRIDGE
 RC-N1C → Android → UDP/Wi-Fi → PC → gamepad virtuale
 ```
 
-Il bridge mantiene l'autodiscovery nella rete locale e mostra stick, pulsanti, modalità, pacchetti e RTT. Termux resta supportato come alternativa; vedi [docs/uso-wireless.md](docs/uso-wireless.md).
+The bridge supports local-network autodiscovery and displays sticks, buttons, flight mode, packet rate, and RTT. Termux is also supported as an alternative; see [docs/uso-wireless.md](docs/uso-wireless.md).
 
-### Simulatore FPV mobile
+### Mobile FPV simulator
 
-La stessa APK include un primo simulatore locale per allenarsi con l'RC-N1C
-anche fuori casa:
+The same APK includes an initial local simulator for practicing with the RC-N1C
+away from the PC:
 
 ```text
 RC-N1C → Rcn1cUsbReader → WebView locale FPV.Sim → scena Acro
 ```
 
-Da **SIMULATORE FPV** si apre una scena 3D offline con fisica Acro e input
-diretto del radiocomando. Non usa root, Accessibility Service, touch injection
-o un secondo bridge USB; il percorso PC/Wi-Fi resta disponibile separatamente.
-La base open source e le decisioni tecniche sono descritte in
-[docs/ricerca-simulatori-fpv-mobile.md](docs/ricerca-simulatori-fpv-mobile.md) e
+The FPV simulator option opens an offline 3D scene with Acro physics and
+direct remote-controller input. It does not use root, an Accessibility Service, touch injection,
+or a second USB bridge; the PC/Wi-Fi path remains available separately.
+The open-source foundation and technical decisions are described in
+[docs/ricerca-simulatori-fpv-mobile.md](docs/ricerca-simulatori-fpv-mobile.md) and
 [docs/adr/0001-simulatore-mobile-webview-locale.md](docs/adr/0001-simulatore-mobile-webview-locale.md).
 
-Il primo test reale va fatto con telefono in orizzontale, RC collegato alla
-porta inferiore tramite adattatore OTG e permesso USB concesso. Il mapping dei
-pulsanti e una scena di allenamento più ricca verranno dopo la validazione
-degli assi e delle prestazioni sull'Oppo A53s.
+The first real-world test should be performed with the phone in landscape orientation,
+the RC connected to the lower port through an OTG adapter, and USB permission granted. Button mapping
+and a richer training scene will follow validation of the axes and performance on the Oppo A53s.
 
-Per ricostruire l'APK servono JDK 17, Android SDK 34 e Gradle 8.7+.
+Building the APK requires JDK 17, Android SDK 34, and Gradle 8.7+.
 
-## Aggiornamenti
+## Updates
 
-L'app Android esegue all'avvio un controllo iniziale della versione e della presenza del radiocomando, senza avviare automaticamente il bridge. Il pulsante **AVVIA** resta sempre manuale. Da **Impostazioni** è possibile modificare IP/porta e lanciare **CONTROLLA AGGIORNAMENTI**: se trova una versione nuova, chiede conferma prima di scaricare e aprire l'installazione dell'APK. Android richiede sempre la conferma dell'utente per un APK installato fuori dallo store.
+At startup, the Android app performs an initial version and remote-controller presence check without starting the bridge automatically. The start action remains manual. From Settings, you can change the IP address and port and check for updates: when a new version is found, the app asks for confirmation before downloading and opening the APK installer. Android always requires user confirmation for an APK installed outside the store.
 
-Su Windows è disponibile anche il controllo da PowerShell:
+On Windows, updates can also be checked from PowerShell:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1
 powershell -ExecutionPolicy Bypass -File tools\Update-DroneApp.ps1 -InstallApk
 ```
 
-Il workflow `.github/workflows/release.yml` ricostruisce, verifica la firma stabile e pubblica `RCN1C_Bridge.apk` per le release stabili.
+The `.github/workflows/release.yml` workflow rebuilds the app, verifies its stable signature, and publishes `RCN1C_Bridge.apk` for stable releases.
 
-## Sviluppo e test
+## Development and testing
 
 ```powershell
 $py = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
@@ -109,8 +108,8 @@ $py = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
 & $py tests\ui_smoke.py
 ```
 
-Il protocollo DUML e il mapping verificato sono descritti in [docs/protocollo-rcn1c.md](docs/protocollo-rcn1c.md). Il progetto è pensato per simulatori e non deve essere usato per pilotare un drone reale.
+The DUML protocol and verified mapping are described in [docs/protocollo-rcn1c.md](docs/protocollo-rcn1c.md). This project is intended for simulators and must not be used to pilot a real drone.
 
-## Licenza
+## License
 
-Distribuito con [licenza MIT](LICENSE).
+Distributed under the [MIT License](LICENSE).
