@@ -60,6 +60,19 @@ def test_simulator_stays_local_and_lightweight():
     assert 'ws://' in bridge and ':8124' in bridge
     assert 'setRcn1cFrame' in bridge
     assert 'addTrainingWorld' in html
+    assert "mode: 'freefly'" in html
+    assert 'createTrainingGate' not in html
+    assert 'countdown-overlay' not in html
+    assert 'race-info' not in html
+    assert 'startRace' not in html
+
+
+def test_android_has_the_same_audio_runtime_asset_as_the_browser_game():
+    browser_audio = PC_SIM / 'audio' / 'fan_interval.wav'
+    mobile_audio = ANDROID_SIM / 'audio' / 'fan_interval.wav'
+    assert browser_audio.exists()
+    assert mobile_audio.exists()
+    assert digest(browser_audio) == digest(mobile_audio)
 
 
 def test_simulator_physics_has_stable_hover_and_real_ground_contact():

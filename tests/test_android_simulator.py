@@ -37,6 +37,8 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'setRcn1cFrame(' in source
     assert 'dispatchGesture' not in source
     assert 'AccessibilityService' not in source
+    assert 'audio/wav' in source
+    assert 'isTextMime' in source
 
     reader = (PACKAGE / 'Rcn1cUsbReader.java').read_text(encoding='utf-8')
     assert 'controlTransfer' in reader
@@ -49,12 +51,17 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
 
     gradle = (ANDROID / 'build.gradle.kts').read_text(encoding='utf-8')
     assert 'assets.srcDirs("assets")' in gradle
+    assert 'syncFpvSimAssets' in gradle
+    assert 'preBuild' in gradle
 
     html = (ASSETS / 'index.html').read_text(encoding='utf-8')
     assert '<script src="three.min.js"></script>' in html
     assert '<script src="simulator-bridge.js"></script>' in html
     assert 'cdnjs.cloudflare.com' not in html
     assert 'fonts.googleapis.com' not in html
+    assert 'RACE' not in html
+    assert 'countdown-overlay' not in html
+    assert 'race-info' not in html
 
     bridge = (ASSETS / 'simulator-bridge.js').read_text(encoding='utf-8')
     assert 'setRcn1cFrame' in bridge
@@ -63,6 +70,7 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'gamepadconnected' in bridge
     assert 'state.connected' in bridge
     assert (ASSETS / 'THREE_JS_LICENSE').exists()
+    assert (ASSETS / 'drone-audio.js').exists()
 
 
 def test_simulator_bridge_runtime_fails_safe_when_rc_is_absent_or_detached():

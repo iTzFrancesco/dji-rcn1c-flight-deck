@@ -82,8 +82,9 @@ The open-source foundation and technical decisions are described in
 [docs/adr/0001-simulatore-mobile-webview-locale.md](docs/adr/0001-simulatore-mobile-webview-locale.md).
 
 The first real-world test should be performed with the phone in landscape orientation,
-the RC connected to the lower port through an OTG adapter, and USB permission granted. Button mapping
-and a richer training scene will follow validation of the axes and performance on the Oppo A53s.
+the RC connected to the lower port through an OTG adapter, and USB permission granted. The current
+training environment is intentionally a single freestyle map: there is no race, timer, lap, or gate
+objective. Additional practice aids can follow validation of the axes and performance on the Oppo A53s.
 
 Building the APK requires JDK 17, Android SDK 34, and Gradle 8.7+.
 

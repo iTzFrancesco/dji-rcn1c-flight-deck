@@ -292,9 +292,10 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         if (!isLocalAsset(uri)) return null;
         String assetPath = uri.getPath().substring("/assets/".length());
         try {
+            String mime = mimeType(assetPath);
             return new WebResourceResponse(
-                    mimeType(assetPath),
-                    "UTF-8",
+                    mime,
+                    isTextMime(mime) ? "UTF-8" : null,
                     getAssets().open(assetPath));
         } catch (IOException ignored) {
             return null;
@@ -319,7 +320,12 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         if (assetPath.endsWith(".html")) return "text/html";
         if (assetPath.endsWith(".png")) return "image/png";
         if (assetPath.endsWith(".jpg") || assetPath.endsWith(".jpeg")) return "image/jpeg";
+        if (assetPath.endsWith(".wav")) return "audio/wav";
         return "application/octet-stream";
+    }
+
+    private static boolean isTextMime(String mime) {
+        return mime != null && (mime.startsWith("text/") || mime.contains("javascript"));
     }
 
     private int dp(float value) {

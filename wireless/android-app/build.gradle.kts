@@ -1,5 +1,16 @@
+import org.gradle.api.tasks.Sync
+
 plugins {
     id("com.android.application") version "8.5.2"
+}
+
+val syncFpvSimAssets = tasks.register<Sync>("syncFpvSimAssets") {
+    from(layout.projectDirectory.dir("../../viz_app/static/fpv-sim"))
+    into(layout.projectDirectory.dir("assets/fpv-sim"))
+}
+
+tasks.matching { it.name == "preBuild" || it.name == "assemble" }.configureEach {
+    dependsOn(syncFpvSimAssets)
 }
 
 android {
@@ -10,8 +21,8 @@ android {
         applicationId = "com.drone.rcn1cbridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 25
-        versionName = "3.3.0-beta13"
+        versionCode = 26
+        versionName = "3.3.0"
     }
 
     sourceSets {

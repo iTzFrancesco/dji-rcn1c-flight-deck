@@ -227,56 +227,6 @@
             opacity: 0.9;
         }
 
-        /* --- COUNTDOWN OVERLAY --- */
-        #countdown-overlay {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 75;
-            pointer-events: none;
-        }
-        #countdown-text {
-            font-size: 8rem;
-            font-weight: bold;
-            color: white;
-            text-shadow: 4px 4px 10px rgba(0,0,0,0.7);
-        }
-
-        /* --- RACE INFO --- */
-        #race-info {
-            position: absolute;
-            top: 20px;
-            right: 380px;
-            background: rgba(0,0,0,0.6);
-            padding: 15px 20px;
-            border-radius: 10px;
-            color: white;
-            font-family: 'Roboto Mono', monospace;
-            z-index: 50;
-            display: none;
-        }
-        #race-info .time { font-size: 2rem; font-weight: bold; }
-        #race-info .lap-info { font-size: 0.9rem; opacity: 0.8; margin-top: 5px; }
-        #race-info .gate-info { font-size: 1rem; margin-top: 8px; color: #4CAF50; }
-
-        /* --- MODE BUTTONS --- */
-        .mode-btn-group {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-        .mode-btn {
-            flex: 1;
-            padding: 10px;
-            font-size: 0.85rem;
-        }
-        .mode-btn.active {
-            background-color: var(--accent) !important;
-            color: #333 !important;
-        }
-
         /* --- KEYBOARD HINTS --- */
         .key-hints {
             font-size: 0.75rem;
@@ -476,7 +426,6 @@
             bottom: 24px !important;
             transform: translateY(-112px);
         }
-        #race-info { right: 24px; }
         #notification-area { top: 92px; right: 24px; }
         #mapping-modal { display: none !important; }
         @media (max-width: 700px) {
@@ -494,20 +443,15 @@
 
     <div id="sidebar">
         <div>
-            <h2>FPV Racing Sim</h2>
+            <h2>FPV Training Sim</h2>
             <p style="font-size: 0.8rem; opacity: 0.7; margin-top:5px;">Betaflight Actual Rates</p>
         </div>
 
         <div class="control-group">
-            <h3>Game Mode</h3>
-            <div class="mode-btn-group">
-                <button id="mode-freefly" class="btn-secondary mode-btn active">Free Flight</button>
-                <button id="mode-race" class="btn-secondary mode-btn">Race</button>
-            </div>
+            <h3>Training Mode</h3>
+            <p style="font-size: 0.82rem; line-height: 1.5; margin: 0;">Free Flight · mappa libera per esercitarti in modalità Acro.</p>
             <div class="key-hints">
                 <span class="key">R</span> Reset &nbsp;
-                <span class="key">Space</span> Start Race<br>
-                <span class="key">Esc</span> Free Flight<br>
                 <span class="key">W</span>/<span class="key">S</span> Camera Tilt
             </div>
         </div>
@@ -551,7 +495,6 @@
         <div id="bridge-chip"><i></i><span>RC BRIDGE</span><b id="game-bridge-state">IN ATTESA</b></div>
         <div id="quick-controls" role="toolbar" aria-label="Comandi rapidi simulatore">
             <button id="quick-freefly" type="button" class="active">FREE FLIGHT</button>
-            <button id="quick-race" type="button">RACE</button>
             <button id="quick-reset" type="button">RESET</button>
             <button id="quick-audio" type="button">AUDIO · ATTIVA AL CLICK</button>
         </div>
@@ -580,23 +523,12 @@
             </div>
         </div>
 
-        <!-- Race Info Panel -->
-        <div id="race-info">
-            <div class="time" id="race-time">00:00.000</div>
-            <div class="lap-info">Best: <span id="best-lap">--:--</span></div>
-            <div class="gate-info" id="gate-counter">Gate 0 / 0</div>
-        </div>
-
         <!-- Crash Overlay -->
         <div id="crash-overlay">
             <h1>CRASHED!</h1>
             <p>Press <strong>R</strong> to reset</p>
         </div>
 
-        <!-- Countdown Overlay -->
-        <div id="countdown-overlay">
-            <div id="countdown-text">3</div>
-        </div>
     </div>
 
     <div id="notification-area"></div>
@@ -669,18 +601,8 @@
 
         // --- 3. GAME STATE ---
         const gameState = {
-            mode: 'freefly',        // 'freefly' | 'countdown' | 'racing' | 'crashed'
-            raceStartTime: 0,
-            currentLapTime: 0,
-            currentGate: 0,
-            totalGates: 0,
-            lapTimes: [],
-            bestLap: null
+            mode: 'freefly'        // 'freefly' | 'crashed'
         };
-
-        // Load best lap from localStorage
-        const savedBestLap = localStorage.getItem('fpv_best_lap');
-        if (savedBestLap) gameState.bestLap = parseFloat(savedBestLap);
 
         // --- 3b. MULTIPLAYER STATE ---
         const multiplayer = {
@@ -1115,8 +1037,9 @@
         droneGroup.visible = false;
         scene.add(droneGroup);
 
-        // --- 9. GATES REMOVED - FREE FLIGHT MODE ---
-        const gates = [];  // Empty for compatibility
+        // --- 9. FREE-FLIGHT TRAINING MAP ---
+        // The block-based world below is the only training environment. The pilot can
+        // practise Acro control freely without a timer or a course objective.
 
         // --- 10. BLOCKY WORLD ENVIRONMENT ---
         const buildings = [];
@@ -1645,90 +1568,6 @@
             return false;
         }
 
-        function checkGatePass() {
-            if (gameState.mode !== 'racing') return;
-
-            const nextGateIndex = gameState.currentGate;
-            if (nextGateIndex >= gates.length) return;
-
-            const gate = gates[nextGateIndex];
-            const dronePos = physics.position;
-
-            // Check if drone is near the gate plane
-            const toGate = new THREE.Vector3().subVectors(dronePos, gate.position);
-            const distAlongForward = toGate.dot(gate.forward);
-
-            // Check if crossed the gate plane (from front to back)
-            if (Math.abs(distAlongForward) < 2) {
-                const lateralDist = Math.sqrt(
-                    Math.pow(toGate.x - distAlongForward * gate.forward.x, 2) +
-                    Math.pow(toGate.z - distAlongForward * gate.forward.z, 2)
-                );
-                const heightFromGate = dronePos.y - gate.position.y;
-
-                // Check if within gate bounds
-                if (lateralDist < gate.width / 2 &&
-                    Math.abs(heightFromGate) < gate.height / 2) {
-
-                    // Gate passed!
-                    gate.passed = true;
-                    gate.poles.forEach(pole => pole.material = gate.passedMat);
-                    gameState.currentGate++;
-
-                    updateGateCounter();
-
-                    if (gameState.currentGate >= gates.length) {
-                        // Lap complete!
-                        completeLap();
-                    } else {
-                        showNotification(`Gate ${nextGateIndex + 1} cleared!`);
-                    }
-                }
-            }
-        }
-
-        function checkGateCollision() {
-            // Simplified: check collision with gate poles
-            for (const gate of gates) {
-                const dx = physics.position.x - gate.position.x;
-                const dy = physics.position.y - gate.position.y;
-                const dz = physics.position.z - gate.position.z;
-
-                // Only check if near the gate
-                if (Math.abs(dx) > 5 || Math.abs(dz) > 5) continue;
-
-                // Check pole collision (simplified bounding boxes)
-                const poleRadius = 0.3;
-                const halfWidth = gate.width / 2;
-
-                // Transform drone position to gate local space
-                const cosR = Math.cos(-gate.group.rotation.y);
-                const sinR = Math.sin(-gate.group.rotation.y);
-                const localX = dx * cosR - dz * sinR;
-                const localZ = dx * sinR + dz * cosR;
-
-                // Check left pole
-                if (Math.abs(localX + halfWidth) < poleRadius + physics.droneRadius &&
-                    Math.abs(localZ) < poleRadius + physics.droneRadius &&
-                    dy > 0 && dy < gate.height) {
-                    return true;
-                }
-                // Check right pole
-                if (Math.abs(localX - halfWidth) < poleRadius + physics.droneRadius &&
-                    Math.abs(localZ) < poleRadius + physics.droneRadius &&
-                    dy > 0 && dy < gate.height) {
-                    return true;
-                }
-                // Check top bar
-                if (Math.abs(dy - gate.height) < poleRadius + physics.droneRadius &&
-                    Math.abs(localZ) < poleRadius + physics.droneRadius &&
-                    Math.abs(localX) < halfWidth) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         // --- 12. GAME FLOW ---
         function triggerCrash() {
             physics.crashed = true;
@@ -1747,92 +1586,11 @@
 
             document.getElementById('crash-overlay').style.display = 'none';
 
-            if (gameState.mode === 'crashed' || gameState.mode === 'racing') {
+            if (gameState.mode === 'crashed') {
                 gameState.mode = 'freefly';
-                gameState.currentGate = 0;
-                document.getElementById('race-info').style.display = 'none';
-
-                // Reset gate colors
-                gates.forEach(gate => {
-                    gate.passed = false;
-                    gate.poles.forEach(pole => pole.material = gate.poleMat);
-                });
             }
 
             showNotification('Drone reset');
-        }
-
-        function startRace() {
-            if (gameState.mode !== 'freefly') return;
-
-            resetDrone();
-            gameState.mode = 'countdown';
-
-            const countdownOverlay = document.getElementById('countdown-overlay');
-            const countdownText = document.getElementById('countdown-text');
-            countdownOverlay.style.display = 'flex';
-
-            let count = 3;
-            countdownText.textContent = count;
-
-            const countdownInterval = setInterval(() => {
-                count--;
-                if (count > 0) {
-                    countdownText.textContent = count;
-                } else if (count === 0) {
-                    countdownText.textContent = 'GO!';
-                } else {
-                    clearInterval(countdownInterval);
-                    countdownOverlay.style.display = 'none';
-                    gameState.mode = 'racing';
-                    gameState.raceStartTime = performance.now();
-                    gameState.currentGate = 0;
-                    document.getElementById('race-info').style.display = 'block';
-                    updateGateCounter();
-                }
-            }, 1000);
-        }
-
-        function completeLap() {
-            const lapTime = (performance.now() - gameState.raceStartTime) / 1000;
-            gameState.lapTimes.push(lapTime);
-
-            if (!gameState.bestLap || lapTime < gameState.bestLap) {
-                gameState.bestLap = lapTime;
-                localStorage.setItem('fpv_best_lap', lapTime.toString());
-                showNotification(`New best lap: ${formatTime(lapTime)}!`);
-            } else {
-                showNotification(`Lap complete: ${formatTime(lapTime)}`);
-            }
-
-            // Reset for next lap
-            gameState.mode = 'freefly';
-            gameState.currentGate = 0;
-            document.getElementById('race-info').style.display = 'none';
-
-            gates.forEach(gate => {
-                gate.passed = false;
-                gate.poles.forEach(pole => pole.material = gate.poleMat);
-            });
-
-            updateBestLap();
-        }
-
-        function formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            const ms = Math.floor((seconds % 1) * 1000);
-            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
-        }
-
-        function updateGateCounter() {
-            document.getElementById('gate-counter').textContent =
-                `Gate ${gameState.currentGate} / ${gameState.totalGates}`;
-        }
-
-        function updateBestLap() {
-            const bestLapEl = document.getElementById('best-lap');
-            bestLapEl.textContent = gameState.bestLap ? formatTime(gameState.bestLap) : '--:--';
         }
 
         // --- 13. BETAFLIGHT ACTUAL RATES ---
@@ -1939,11 +1697,6 @@
             // contact plane and a hard impact is not hidden by a pre-clamp.
             droneGroup.position.copy(physics.position);
 
-            if (checkGateCollision()) {
-                triggerCrash();
-                return;
-            }
-
             if (checkBoundaryCollision()) {
                 triggerCrash();
                 return;
@@ -1954,7 +1707,6 @@
                 return;
             }
 
-            checkGatePass();
         }
 
         // --- 15. CAMERA UPDATE ---
@@ -1995,10 +1747,6 @@
             document.getElementById('hud-throttle').textContent = Math.round(throttle01 * 100);
             document.getElementById('hud-tilt').textContent = cameraController.tiltAngle;
 
-            if (gameState.mode === 'racing') {
-                const elapsed = (performance.now() - gameState.raceStartTime) / 1000;
-                document.getElementById('race-time').textContent = formatTime(elapsed);
-            }
         }
 
         // --- 17. PROP ANIMATION ---
@@ -2026,16 +1774,6 @@
             armMotorAudio();
             if (e.code === 'KeyR') {
                 resetDrone();
-            } else if (e.code === 'Space' || e.code === 'Enter') {
-                if (gameState.mode === 'freefly') {
-                    startRace();
-                }
-            } else if (e.code === 'Escape') {
-                if (gameState.mode === 'racing') {
-                    gameState.mode = 'freefly';
-                    document.getElementById('race-info').style.display = 'none';
-                    showNotification('Race cancelled');
-                }
             } else if (e.code === 'KeyW') {
                 // Tilt camera up
                 cameraController.tiltAngle = Math.min(
@@ -2053,31 +1791,9 @@
             }
         });
 
-        // Mode buttons
-        document.getElementById('mode-freefly').addEventListener('click', () => {
-            document.getElementById('mode-freefly').classList.add('active');
-            document.getElementById('mode-race').classList.remove('active');
-            document.getElementById('quick-freefly').classList.add('active');
-            document.getElementById('quick-race').classList.remove('active');
-            if (gameState.mode === 'racing') {
-                gameState.mode = 'freefly';
-                document.getElementById('race-info').style.display = 'none';
-            }
-        });
-
-        document.getElementById('mode-race').addEventListener('click', () => {
-            document.getElementById('mode-race').classList.add('active');
-            document.getElementById('mode-freefly').classList.remove('active');
-            document.getElementById('quick-race').classList.add('active');
-            document.getElementById('quick-freefly').classList.remove('active');
-            startRace();
-        });
-
+        // The simulator has one mode by design: a reset button is the only game-flow action.
         document.getElementById('quick-freefly').addEventListener('click', () => {
-            document.getElementById('mode-freefly').click();
-        });
-        document.getElementById('quick-race').addEventListener('click', () => {
-            document.getElementById('mode-race').click();
+            showNotification('Free Flight attivo');
         });
 
         // Reset button
@@ -2196,7 +1912,6 @@
 
         // --- 21. MAIN ANIMATION LOOP ---
         const clock = new THREE.Clock();
-        updateBestLap();
 
         function animate() {
             requestAnimationFrame(animate);
@@ -2255,7 +1970,7 @@
             }
 
             // Update systems
-            if (gameState.mode !== 'countdown' && hasInput) {
+            if (hasInput) {
                 updatePhysics(dt, rawRoll, rawPitch, rawYaw, rawThrottle);
             }
             updateCamera(dt);
