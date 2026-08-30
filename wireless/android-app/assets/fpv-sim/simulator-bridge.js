@@ -14,6 +14,14 @@
     var gamepadAnnounced = false;
     var desktopSocket = null;
     var desktopReconnectTimer = null;
+    var gamepadList = [];
+    var flightControls = {
+        connected: false,
+        yaw: 0,
+        throttle: 0,
+        roll: 0,
+        pitch: 0
+    };
 
     function clampNormalized(value) {
         return Math.max(-1, Math.min(1, Number(value) || 0));
@@ -43,6 +51,7 @@
         vibrationActuator: null,
         hapticActuators: []
     };
+    gamepadList.push(fakeGamepad);
 
     function invertedAxis(value) {
         return value === 0 ? 0 : -value;
@@ -97,15 +106,14 @@
     // Canonical Mode 2 controls for the simulator. This bypasses browser-specific
     // Gamepad axis conventions and accepts both Android raw RC values and desktop int16 values.
     window.getRcn1cFlightControls = function () {
-        return {
-            connected: state.connected,
-            yaw: state.lx,
-            // RC-N1C reports upper throttle as the negative normalized LY direction.
-            // Expose the simulator-facing convention: stick up = positive throttle.
-            throttle: invertedAxis(state.ly),
-            roll: state.rx,
-            pitch: state.ry
-        };
+        flightControls.connected = state.connected;
+        flightControls.yaw = state.lx;
+        // Keep the canonical bridge value stable; the simulator applies the
+        // physical throttle direction at its input boundary.
+        flightControls.throttle = invertedAxis(state.ly);
+        flightControls.roll = state.rx;
+        flightControls.pitch = state.ry;
+        return flightControls;
     };
 
     window.setRcn1cStatus = function (message, connected) {
@@ -115,11 +123,6 @@
         if (!state.connected && gamepadAnnounced) {
             gamepadAnnounced = false;
             dispatchGamepadEvent('gamepaddisconnected');
-        }
-        var element = document.getElementById('rcn1c-bridge-status');
-        if (element) {
-            element.textContent = message || 'RC non collegato';
-            element.style.color = state.connected ? '#2ED573' : '#FFB86B';
         }
         var gameState = document.getElementById('game-bridge-state');
         var gameDot = typeof document.querySelector === 'function'
@@ -137,7 +140,7 @@
     // The direct seam is reliable even on WebViews where navigator.getGamepads
     // is missing or exposed as a non-configurable native property.
     window.getRcn1cGamepads = function () {
-        return [fakeGamepad];
+        return gamepadList;
     };
 
     var nativeGetGamepads = typeof navigator.getGamepads === 'function'
@@ -155,17 +158,6 @@
     } catch (error) {
         console.warn('RC-N1C: Gamepad API non sostituibile', error);
     }
-
-    var status = document.createElement('div');
-    status.id = 'rcn1c-bridge-status';
-    status.textContent = 'In attesa del RC-N1C...';
-    status.style.cssText = [
-        'position:fixed', 'left:12px', 'bottom:10px', 'z-index:4000',
-        'padding:5px 8px', 'border:1px solid #385064', 'border-radius:6px',
-        'background:rgba(7,13,20,.82)', 'font:11px monospace',
-        'color:#FFB86B', 'pointer-events:none'
-    ].join(';');
-    document.body.appendChild(status);
 
     function desktopHost() {
         if (!window.location || !window.location.hostname) return false;

@@ -60,6 +60,35 @@ def test_simulator_stays_local_and_lightweight():
     assert 'ws://' in bridge and ':8124' in bridge
     assert 'setRcn1cFrame' in bridge
     assert 'addTrainingWorld' in html
+    assert "mode: 'freefly'" in html
+    assert 'createTrainingGate' not in html
+    assert 'countdown-overlay' not in html
+    assert 'race-info' not in html
+    assert 'startRace' not in html
+    assert 'id="top-left-controls"' in html
+    assert 'id="dashboard-link"' in html
+    assert 'id="bridge-chip"' in html
+    assert 'id="quick-reset"' in html
+    assert 'id="game-chrome"' not in html
+    assert 'id="quick-controls"' not in html
+    assert 'id="hud"' not in html
+    assert 'id="rcn1c-bridge-status"' not in html
+    assert 'Premi <strong>RESET</strong> per ripartire' in html
+    assert 'z-index: 90;' in html
+    assert 'const controlSensitivity = mobileProfile ? 1.12 : 1.0;' in html
+    assert 'function filterControl(value, axis, dt)' in html
+    assert 'if (deflection < 0.02) return 0;' not in html
+    assert 'const renderPixelRatio = mobileProfile' in html
+    assert 'const scatteredBlockCount = mobileProfile ? 12 : 30;' in html
+    assert 'The detailed floor-by-floor shell is hundreds of draw calls' in html
+
+
+def test_android_has_the_same_audio_runtime_asset_as_the_browser_game():
+    browser_audio = PC_SIM / 'audio' / 'fan_interval.wav'
+    mobile_audio = ANDROID_SIM / 'audio' / 'fan_interval.wav'
+    assert browser_audio.exists()
+    assert mobile_audio.exists()
+    assert digest(browser_audio) == digest(mobile_audio)
 
 
 def test_simulator_physics_has_stable_hover_and_real_ground_contact():
@@ -124,11 +153,16 @@ console.log('MOTOR_AUDIO_WEBVIEW_PASS');
 def test_pc_simulator_is_fullscreen_plug_and_play():
     html = (PC_SIM / 'index.html').read_text(encoding='utf-8')
     assert '#sidebar { display: none !important; }' in html
-    assert 'id="quick-controls"' in html
+    assert 'id="top-left-controls"' in html
+    assert 'id="quick-reset"' in html
     assert 'droneGroup.visible = false;' in html
     assert 'rawRoll = -directInput.roll;' in html
     assert 'rawYaw = -directInput.yaw;' in html
-    assert 'rawThrottle = directInput.throttle;' in html
+    assert 'rawThrottle = -directInput.throttle;' in html
+    assert 'window.getFpvSimulatorState' in html
+    assert 'sendPlayerUpdate(dt);' in html
+    assert 'const updateInterval = mobileProfile ? 1 / 15 : 1 / 30;' in html
+    assert "rawThrottle = filterControl(hasInput ? rawThrottle : 0, 'throttle', dt);" in html
     assert 'const CONFIG_VERSION = 4;' in html
     assert 'id="roll-center" value="100"' in html
     assert 'id="roll-max" value="900"' in html

@@ -37,6 +37,11 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'setRcn1cFrame(' in source
     assert 'dispatchGesture' not in source
     assert 'AccessibilityService' not in source
+    assert 'audio/wav' in source
+    assert 'isTextMime' in source
+    assert 'TextView' not in source
+    assert 'FRAME_PUSH_MS = 20L' in source
+    assert 'lastPushedPacketCount' in source
 
     reader = (PACKAGE / 'Rcn1cUsbReader.java').read_text(encoding='utf-8')
     assert 'controlTransfer' in reader
@@ -48,13 +53,33 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'SimulatorActivity.class' in main
 
     gradle = (ANDROID / 'build.gradle.kts').read_text(encoding='utf-8')
+    assert 'versionCode = 28' in gradle
+    assert 'versionName = "3.3.2"' in gradle
     assert 'assets.srcDirs("assets")' in gradle
+    assert 'syncFpvSimAssets' in gradle
+    assert 'preBuild' in gradle
 
     html = (ASSETS / 'index.html').read_text(encoding='utf-8')
     assert '<script src="three.min.js"></script>' in html
     assert '<script src="simulator-bridge.js"></script>' in html
     assert 'cdnjs.cloudflare.com' not in html
     assert 'fonts.googleapis.com' not in html
+    assert 'RACE' not in html
+    assert 'countdown-overlay' not in html
+    assert 'race-info' not in html
+    assert 'id="top-left-controls"' in html
+    assert 'id="dashboard-link"' in html
+    assert 'id="bridge-chip"' in html
+    assert 'id="quick-reset"' in html
+    assert 'id="game-chrome"' not in html
+    assert 'id="quick-controls"' not in html
+    assert 'id="hud"' not in html
+    assert 'id="rcn1c-bridge-status"' not in html
+    assert 'Premi <strong>RESET</strong> per ripartire' in html
+    assert 'const controlSensitivity = mobileProfile ? 1.12 : 1.0;' in html
+    assert 'if (deflection < 0.02) return 0;' not in html
+    assert 'const renderPixelRatio = mobileProfile' in html
+    assert 'const scatteredBlockCount = mobileProfile ? 12 : 30;' in html
 
     bridge = (ASSETS / 'simulator-bridge.js').read_text(encoding='utf-8')
     assert 'setRcn1cFrame' in bridge
@@ -63,6 +88,7 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'gamepadconnected' in bridge
     assert 'state.connected' in bridge
     assert (ASSETS / 'THREE_JS_LICENSE').exists()
+    assert (ASSETS / 'drone-audio.js').exists()
 
 
 def test_simulator_bridge_runtime_fails_safe_when_rc_is_absent_or_detached():

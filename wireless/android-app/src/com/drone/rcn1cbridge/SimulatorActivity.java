@@ -13,7 +13,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.Gravity;
 import android.view.WindowManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -21,7 +20,6 @@ import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.widget.FrameLayout;
-import android.widget.TextView;
 
 import org.json.JSONObject;
 
@@ -36,7 +34,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
     private static final String LOCAL_ASSET_BASE = "https://appassets.androidplatform.net/assets/fpv-sim/";
     private static final String LOCAL_ASSET_HOST = "appassets.androidplatform.net";
     private static final long RETRY_MS = 1200L;
-    private static final long FRAME_PUSH_MS = 16L;
+    private static final long FRAME_PUSH_MS = 20L;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private volatile Rcn1cUsbReader.Frame latestFrame;
@@ -44,9 +42,9 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
     private volatile boolean closing;
     private volatile int readerDeviceId = -1;
     private boolean frameStreamConnected;
+    private long lastPushedPacketCount = -1L;
 
     private WebView webView;
-    private TextView status;
     private Rcn1cUsbReader reader;
 
     private final Runnable retryReader = new Runnable() {
@@ -166,18 +164,6 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         root.addView(webView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-
-        status = new TextView(this);
-        status.setText("Avvio simulatore...");
-        status.setTextColor(0xFFFFB86B);
-        status.setTextSize(11);
-        status.setGravity(Gravity.CENTER);
-        status.setPadding(dp(8), dp(4), dp(8), dp(4));
-        status.setBackgroundColor(0xCC07101A);
-        FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT, dp(28), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        statusParams.topMargin = dp(6);
-        root.addView(status, statusParams);
         setContentView(root);
     }
 
@@ -197,6 +183,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         }
         readerDeviceId = device.getDeviceId();
         latestFrame = null;
+        lastPushedPacketCount = -1L;
         frameStreamConnected = false;
         if (!reader.start(device)) {
             postStatus("Impossibile avviare il lettore RC");
@@ -220,6 +207,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         if (!pageReady || webView == null || closing) return;
         if (frame == null || reader == null || !reader.isRunning()) {
             latestFrame = null;
+            lastPushedPacketCount = -1L;
             if (frameStreamConnected) {
                 frameStreamConnected = false;
                 webView.evaluateJavascript(
@@ -227,6 +215,8 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
             }
             return;
         }
+        if (frame.packetCount == lastPushedPacketCount) return;
+        lastPushedPacketCount = frame.packetCount;
         frameStreamConnected = true;
         String script = String.format(Locale.US,
                 "window.setRcn1cFrame(%d,%d,%d,%d,%d,%d,%.1f);",
@@ -249,6 +239,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
     public void onStopped(String reason) {
         if (!closing) {
             latestFrame = null;
+            lastPushedPacketCount = -1L;
             frameStreamConnected = false;
             readerDeviceId = -1;
             postStatus("Lettore fermo · " + reason);
@@ -259,7 +250,6 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
     private void postStatus(String message) {
         ui.post(() -> {
             if (closing) return;
-            if (status != null) status.setText(message);
             if (webView != null) {
                 webView.evaluateJavascript(
                         "window.setRcn1cStatus(" + JSONObject.quote(message) + "," +
@@ -292,9 +282,10 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         if (!isLocalAsset(uri)) return null;
         String assetPath = uri.getPath().substring("/assets/".length());
         try {
+            String mime = mimeType(assetPath);
             return new WebResourceResponse(
-                    mimeType(assetPath),
-                    "UTF-8",
+                    mime,
+                    isTextMime(mime) ? "UTF-8" : null,
                     getAssets().open(assetPath));
         } catch (IOException ignored) {
             return null;
@@ -319,10 +310,12 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         if (assetPath.endsWith(".html")) return "text/html";
         if (assetPath.endsWith(".png")) return "image/png";
         if (assetPath.endsWith(".jpg") || assetPath.endsWith(".jpeg")) return "image/jpeg";
+        if (assetPath.endsWith(".wav")) return "audio/wav";
         return "application/octet-stream";
     }
 
-    private int dp(float value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
+    private static boolean isTextMime(String mime) {
+        return mime != null && (mime.startsWith("text/") || mime.contains("javascript"));
     }
+
 }
