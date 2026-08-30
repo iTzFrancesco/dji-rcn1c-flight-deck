@@ -73,6 +73,14 @@ def test_simulator_stays_local_and_lightweight():
     assert 'id="quick-controls"' not in html
     assert 'id="hud"' not in html
     assert 'id="rcn1c-bridge-status"' not in html
+    assert 'Premi <strong>RESET</strong> per ripartire' in html
+    assert 'z-index: 90;' in html
+    assert 'const controlSensitivity = mobileProfile ? 1.12 : 1.0;' in html
+    assert 'function filterControl(value, axis, dt)' in html
+    assert 'if (deflection < 0.02) return 0;' not in html
+    assert 'const renderPixelRatio = mobileProfile' in html
+    assert 'const scatteredBlockCount = mobileProfile ? 12 : 30;' in html
+    assert 'The detailed floor-by-floor shell is hundreds of draw calls' in html
 
 
 def test_android_has_the_same_audio_runtime_asset_as_the_browser_game():
@@ -154,6 +162,7 @@ def test_pc_simulator_is_fullscreen_plug_and_play():
     assert 'window.getFpvSimulatorState' in html
     assert 'sendPlayerUpdate(dt);' in html
     assert 'const updateInterval = mobileProfile ? 1 / 15 : 1 / 30;' in html
+    assert "rawThrottle = filterControl(hasInput ? rawThrottle : 0, 'throttle', dt);" in html
     assert 'const CONFIG_VERSION = 4;' in html
     assert 'id="roll-center" value="100"' in html
     assert 'id="roll-max" value="900"' in html

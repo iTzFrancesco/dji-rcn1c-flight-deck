@@ -53,8 +53,8 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'SimulatorActivity.class' in main
 
     gradle = (ANDROID / 'build.gradle.kts').read_text(encoding='utf-8')
-    assert 'versionCode = 27' in gradle
-    assert 'versionName = "3.3.1"' in gradle
+    assert 'versionCode = 28' in gradle
+    assert 'versionName = "3.3.2"' in gradle
     assert 'assets.srcDirs("assets")' in gradle
     assert 'syncFpvSimAssets' in gradle
     assert 'preBuild' in gradle
@@ -75,6 +75,11 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'id="quick-controls"' not in html
     assert 'id="hud"' not in html
     assert 'id="rcn1c-bridge-status"' not in html
+    assert 'Premi <strong>RESET</strong> per ripartire' in html
+    assert 'const controlSensitivity = mobileProfile ? 1.12 : 1.0;' in html
+    assert 'if (deflection < 0.02) return 0;' not in html
+    assert 'const renderPixelRatio = mobileProfile' in html
+    assert 'const scatteredBlockCount = mobileProfile ? 12 : 30;' in html
 
     bridge = (ASSETS / 'simulator-bridge.js').read_text(encoding='utf-8')
     assert 'setRcn1cFrame' in bridge

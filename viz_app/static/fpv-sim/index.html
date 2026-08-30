@@ -251,7 +251,7 @@
             position: absolute;
             top: 18px;
             left: 20px;
-            z-index: 55;
+            z-index: 90;
             display: flex;
             align-items: center;
             gap: 7px;
@@ -412,7 +412,7 @@
         <!-- Crash Overlay -->
         <div id="crash-overlay">
             <h1>CRASHED!</h1>
-            <p>Press <strong>R</strong> to reset</p>
+            <p>Premi <strong>RESET</strong> per ripartire</p>
         </div>
 
     </div>
@@ -434,6 +434,31 @@
         // ============================================================
         // FPV RACING SIMULATOR - BETAFLIGHT ACTUAL RATES
         // ============================================================
+
+        // Touch devices need a little more control authority on a small
+        // display, but the signal must stay continuous: there is deliberately
+        // no hard dead zone here. The filter only removes high-frequency
+        // packet jitter and reaches a new stick position quickly.
+        const mobileProfile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+            (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+        const controlSensitivity = mobileProfile ? 1.12 : 1.0;
+        const controlResponse = mobileProfile ? 26 : 34;
+        const filteredControls = { roll: 0, pitch: 0, yaw: 0, throttle: 0 };
+
+        function filterControl(value, axis, dt) {
+            const target = THREE.MathUtils.clamp(
+                (Number(value) || 0) * controlSensitivity,
+                -1,
+                1
+            );
+            const boundedDt = Math.min(Math.max(Number(dt) || 0, 0), 0.05);
+            const response = 1 - Math.exp(-boundedDt * controlResponse);
+            filteredControls[axis] += (target - filteredControls[axis]) * response;
+
+            // Full-stick endpoints should never feel soft or undershoot.
+            if (Math.abs(target) >= 0.999) filteredControls[axis] = target;
+            return filteredControls[axis];
+        }
 
         // --- 1. STATE & CONFIGURATION ---
         const CONFIG_VERSION = 4;
@@ -744,8 +769,6 @@
         const scene = new THREE.Scene();
 
         // Create sky dome for static background
-        const mobileProfile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-            (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
         const skyGeometry = new THREE.SphereGeometry(500, mobileProfile ? 16 : 32, mobileProfile ? 12 : 32);
         const skyCanvas = document.createElement('canvas');
         skyCanvas.width = 1024;
@@ -785,7 +808,10 @@
             powerPreference: 'default'
         });
         renderer.setSize(container.clientWidth, container.clientHeight);
-        renderer.setPixelRatio(mobileProfile ? 1 : Math.min(window.devicePixelRatio, 2));
+        const renderPixelRatio = mobileProfile
+            ? 0.85
+            : Math.min(window.devicePixelRatio || 1, 2);
+        renderer.setPixelRatio(renderPixelRatio);
         renderer.shadowMap.enabled = !mobileProfile;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1132,46 +1158,58 @@
             core.position.y = totalHeight / 2;
             group.add(core);
 
-            // Glass floors
-            for (let i = 0; i < floors; i++) {
-                const floorY = i * floorHeight + floorHeight / 2;
-
-                // Glass panels on each side
-                const panelMat = new THREE.MeshStandardMaterial({
-                    color: i % 2 === 0 ? 0x88DDFF : 0x66BBDD,
-                    roughness: 0.05,
-                    metalness: 0.95,
-                    transparent: true,
-                    opacity: 0.7
-                });
-
-                // Front and back panels
-                for (let side of [-1, 1]) {
-                    const panel = new THREE.Mesh(
-                        new THREE.BoxGeometry(width, floorHeight - 0.5, 0.2),
-                        panelMat
-                    );
-                    panel.position.set(0, floorY, side * depth / 2);
-                    group.add(panel);
-                }
-
-                // Left and right panels
-                for (let side of [-1, 1]) {
-                    const panel = new THREE.Mesh(
-                        new THREE.BoxGeometry(0.2, floorHeight - 0.5, depth),
-                        panelMat
-                    );
-                    panel.position.set(side * width / 2, floorY, 0);
-                    group.add(panel);
-                }
-
-                // Floor slab
-                const slab = new THREE.Mesh(
-                    new THREE.BoxGeometry(width, 0.3, depth),
-                    new THREE.MeshStandardMaterial({ color: 0x555555 })
+            if (mobileProfile) {
+                // The detailed floor-by-floor shell is hundreds of draw calls
+                // across the city. A single shell preserves the silhouette
+                // and collision volume on phones without changing the map.
+                const shell = new THREE.Mesh(
+                    new THREE.BoxGeometry(width, totalHeight, depth),
+                    glassMaterial
                 );
-                slab.position.y = i * floorHeight;
-                group.add(slab);
+                shell.position.y = totalHeight / 2;
+                group.add(shell);
+            } else {
+                // Glass floors
+                for (let i = 0; i < floors; i++) {
+                    const floorY = i * floorHeight + floorHeight / 2;
+
+                    // Glass panels on each side
+                    const panelMat = new THREE.MeshStandardMaterial({
+                        color: i % 2 === 0 ? 0x88DDFF : 0x66BBDD,
+                        roughness: 0.05,
+                        metalness: 0.95,
+                        transparent: true,
+                        opacity: 0.7
+                    });
+
+                    // Front and back panels
+                    for (let side of [-1, 1]) {
+                        const panel = new THREE.Mesh(
+                            new THREE.BoxGeometry(width, floorHeight - 0.5, 0.2),
+                            panelMat
+                        );
+                        panel.position.set(0, floorY, side * depth / 2);
+                        group.add(panel);
+                    }
+
+                    // Left and right panels
+                    for (let side of [-1, 1]) {
+                        const panel = new THREE.Mesh(
+                            new THREE.BoxGeometry(0.2, floorHeight - 0.5, depth),
+                            panelMat
+                        );
+                        panel.position.set(side * width / 2, floorY, 0);
+                        group.add(panel);
+                    }
+
+                    // Floor slab
+                    const slab = new THREE.Mesh(
+                        new THREE.BoxGeometry(width, 0.3, depth),
+                        new THREE.MeshStandardMaterial({ color: 0x555555 })
+                    );
+                    slab.position.y = i * floorHeight;
+                    group.add(slab);
+                }
             }
 
             // Roof
@@ -1297,7 +1335,8 @@
         createBlockyBuilding(100, 100, 28, 28, 9, blockColors.yellow);
 
         // Scattered smaller blocks for obstacles
-        for (let i = 0; i < 30; i++) {
+        const scatteredBlockCount = mobileProfile ? 12 : 30;
+        for (let i = 0; i < scatteredBlockCount; i++) {
             const x = (Math.random() - 0.5) * 300;
             const z = (Math.random() - 0.5) * 300;
 
@@ -1487,7 +1526,7 @@
             physics.velocity.set(0, 0, 0);
             gameState.mode = 'crashed';
             document.getElementById('crash-overlay').style.display = 'flex';
-            showNotification('Crashed! Press R to reset');
+            showNotification('Crashed! Premi RESET per ripartire');
         }
 
         function resetDrone() {
@@ -1509,7 +1548,6 @@
         // --- 13. BETAFLIGHT ACTUAL RATES ---
         function calculateActualRate(input, centerSens, maxRate, expo) {
             const deflection = Math.abs(input);
-            if (deflection < 0.02) return 0;
 
             const s = centerSens;
             const m = maxRate;
@@ -1863,6 +1901,13 @@
                     }
                 }
             }
+
+            // Keep every small movement live, while smoothing only the
+            // high-frequency jitter produced by the RC/WebView path.
+            rawRoll = filterControl(hasInput ? rawRoll : 0, 'roll', dt);
+            rawPitch = filterControl(hasInput ? rawPitch : 0, 'pitch', dt);
+            rawYaw = filterControl(hasInput ? rawYaw : 0, 'yaw', dt);
+            rawThrottle = filterControl(hasInput ? rawThrottle : 0, 'throttle', dt);
 
             // Update systems
             if (hasInput) {

@@ -115,6 +115,16 @@ def main():
             center_altitude = float(center_state['altitude'])
             assert abs(center_altitude - 5.0) < 0.2, center_altitude
 
+            # Small stick motion must remain live; this guards against a
+            # reintroduced hard dead zone while the response filter settles.
+            page.evaluate('window.setRcn1cFrame(1024, 958, 1024, 1024, 0x1000, 1, 120)')
+            page.wait_for_timeout(180)
+            small_input_state = page.evaluate('window.getFpvSimulatorState()')
+            assert abs(float(small_input_state['throttleInput'])) > 0.05, small_input_state
+            page.evaluate('window.setRcn1cFrame(1024, 1024, 1024, 1024, 0x1000, 1, 120)')
+            page.get_by_role('button', name='RESET').click()
+            page.wait_for_timeout(150)
+
             page.evaluate('window.setRcn1cFrame(1024, 364, 1024, 1024, 0x1000, 1, 120)')
             down_controls = page.evaluate('window.getRcn1cFlightControls()')
             assert down_controls['connected'] is True
@@ -148,6 +158,18 @@ def main():
             page.get_by_role('button', name='RESET').click()
             page.wait_for_timeout(150)
             assert page.locator('#game-bridge-state').inner_text() == 'ONLINE'
+
+            page.evaluate('window.setRcn1cFrame(1024, 364, 1024, 1024, 0x1000, 1, 120)')
+            page.wait_for_timeout(1000)
+            assert page.locator('#crash-overlay').evaluate("el => getComputedStyle(el).display") == 'flex'
+            crash_text = ' '.join(page.locator('#crash-overlay').inner_text().split())
+            assert crash_text == 'CRASHED! Premi RESET per ripartire'
+            assert page.get_by_role('button', name='RESET').is_visible()
+            page.evaluate('window.setRcn1cFrame(1024, 1024, 1024, 1024, 0x1000, 1, 120)')
+            page.get_by_role('button', name='RESET').click()
+            page.wait_for_timeout(150)
+            assert page.locator('#crash-overlay').evaluate("el => getComputedStyle(el).display") == 'none'
+            assert abs(float(page.evaluate('window.getFpvSimulatorState().altitude')) - 5.0) < 0.2
             assert not errors, '; '.join(errors)
             browser.close()
     finally:
