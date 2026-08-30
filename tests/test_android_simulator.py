@@ -39,6 +39,9 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'AccessibilityService' not in source
     assert 'audio/wav' in source
     assert 'isTextMime' in source
+    assert 'TextView' not in source
+    assert 'FRAME_PUSH_MS = 20L' in source
+    assert 'lastPushedPacketCount' in source
 
     reader = (PACKAGE / 'Rcn1cUsbReader.java').read_text(encoding='utf-8')
     assert 'controlTransfer' in reader
@@ -50,6 +53,8 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'SimulatorActivity.class' in main
 
     gradle = (ANDROID / 'build.gradle.kts').read_text(encoding='utf-8')
+    assert 'versionCode = 27' in gradle
+    assert 'versionName = "3.3.1"' in gradle
     assert 'assets.srcDirs("assets")' in gradle
     assert 'syncFpvSimAssets' in gradle
     assert 'preBuild' in gradle
@@ -62,6 +67,14 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'RACE' not in html
     assert 'countdown-overlay' not in html
     assert 'race-info' not in html
+    assert 'id="top-left-controls"' in html
+    assert 'id="dashboard-link"' in html
+    assert 'id="bridge-chip"' in html
+    assert 'id="quick-reset"' in html
+    assert 'id="game-chrome"' not in html
+    assert 'id="quick-controls"' not in html
+    assert 'id="hud"' not in html
+    assert 'id="rcn1c-bridge-status"' not in html
 
     bridge = (ASSETS / 'simulator-bridge.js').read_text(encoding='utf-8')
     assert 'setRcn1cFrame' in bridge

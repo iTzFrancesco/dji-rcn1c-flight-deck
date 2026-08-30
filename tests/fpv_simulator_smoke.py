@@ -88,7 +88,11 @@ def main():
             page.wait_for_selector('canvas')
             assert page.title() == 'RC-N1C // FPV Training'
             assert page.locator('canvas').count() == 1
-            assert page.locator('#quick-controls button').count() == 3
+            assert page.locator('#top-left-controls > *').count() == 3
+            assert page.locator('#dashboard-link').inner_text() == '← FLIGHT DECK'
+            assert page.locator('#bridge-chip').inner_text().startswith('RC BRIDGE')
+            assert page.locator('#quick-reset').inner_text() == 'RESET'
+            assert page.locator('#game-chrome, #quick-controls, #hud, #rcn1c-bridge-status').count() == 0
             assert page.get_by_role('button', name='RACE').count() == 0
             assert page.locator('#race-info').count() == 0
             assert page.locator('#countdown-overlay').count() == 0
@@ -107,35 +111,43 @@ def main():
                 'roll': 0,
                 'pitch': 0,
             }
-            center_altitude = float(page.locator('#hud-alt').inner_text())
+            center_state = page.evaluate('window.getFpvSimulatorState()')
+            center_altitude = float(center_state['altitude'])
             assert abs(center_altitude - 5.0) < 0.2, center_altitude
 
             page.evaluate('window.setRcn1cFrame(1024, 364, 1024, 1024, 0x1000, 1, 120)')
-            max_controls = page.evaluate('window.getRcn1cFlightControls()')
-            assert max_controls['connected'] is True
-            assert max_controls['throttle'] == 1
+            down_controls = page.evaluate('window.getRcn1cFlightControls()')
+            assert down_controls['connected'] is True
+            assert down_controls['throttle'] == 1
+            page.wait_for_timeout(120)
+            down_state = page.evaluate('window.getFpvSimulatorState()')
+            assert down_state['throttleInput'] == -1
+            assert down_state['altitude'] < center_altitude, (center_altitude, down_state)
+
+            page.evaluate('window.setRcn1cFrame(1024, 1684, 1024, 1024, 0x1000, 1, 120)')
+            up_controls = page.evaluate('window.getRcn1cFlightControls()')
+            assert up_controls['throttle'] == -1
             page.wait_for_timeout(750)
-            lifted_altitude = float(page.locator('#hud-alt').inner_text())
-            assert lifted_altitude > center_altitude + 0.05, (center_altitude, lifted_altitude)
+            lifted_state = page.evaluate('window.getFpvSimulatorState()')
+            assert lifted_state['throttleInput'] == 1
+            assert lifted_state['altitude'] > center_altitude + 0.05, (center_altitude, lifted_state)
 
             page.evaluate('window.setRcn1cFrame(1024, 1024, 1024, 1024, 0x1000, 1, 120)')
             page.get_by_role('button', name='RESET').click()
             page.wait_for_timeout(150)
-            reset_altitude = float(page.locator('#hud-alt').inner_text())
+            reset_altitude = float(page.evaluate('window.getFpvSimulatorState().altitude'))
             assert abs(reset_altitude - 5.0) < 0.2, reset_altitude
             assert page.locator('#crash-overlay').evaluate("el => getComputedStyle(el).display") == 'none'
 
-            page.get_by_role('button', name='FREE FLIGHT').click()
-            page.wait_for_timeout(150)
-            assert 'FREE FLIGHT' in page.locator('#game-chrome .title').inner_text()
             assert page.evaluate(
                 'performance.getEntriesByType("resource").some(entry => entry.name.includes("fan_interval.wav"))'
             )
             assert page.locator('#crash-overlay').evaluate("el => getComputedStyle(el).display") == 'none'
 
+            page.evaluate("window.setRcn1cStatus('RC collegato', true)")
             page.get_by_role('button', name='RESET').click()
             page.wait_for_timeout(150)
-            assert page.locator('#game-bridge-state').inner_text() in ('IN ATTESA', 'ONLINE')
+            assert page.locator('#game-bridge-state').inner_text() == 'ONLINE'
             assert not errors, '; '.join(errors)
             browser.close()
     finally:

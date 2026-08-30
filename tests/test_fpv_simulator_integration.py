@@ -65,6 +65,14 @@ def test_simulator_stays_local_and_lightweight():
     assert 'countdown-overlay' not in html
     assert 'race-info' not in html
     assert 'startRace' not in html
+    assert 'id="top-left-controls"' in html
+    assert 'id="dashboard-link"' in html
+    assert 'id="bridge-chip"' in html
+    assert 'id="quick-reset"' in html
+    assert 'id="game-chrome"' not in html
+    assert 'id="quick-controls"' not in html
+    assert 'id="hud"' not in html
+    assert 'id="rcn1c-bridge-status"' not in html
 
 
 def test_android_has_the_same_audio_runtime_asset_as_the_browser_game():
@@ -137,11 +145,15 @@ console.log('MOTOR_AUDIO_WEBVIEW_PASS');
 def test_pc_simulator_is_fullscreen_plug_and_play():
     html = (PC_SIM / 'index.html').read_text(encoding='utf-8')
     assert '#sidebar { display: none !important; }' in html
-    assert 'id="quick-controls"' in html
+    assert 'id="top-left-controls"' in html
+    assert 'id="quick-reset"' in html
     assert 'droneGroup.visible = false;' in html
     assert 'rawRoll = -directInput.roll;' in html
     assert 'rawYaw = -directInput.yaw;' in html
-    assert 'rawThrottle = directInput.throttle;' in html
+    assert 'rawThrottle = -directInput.throttle;' in html
+    assert 'window.getFpvSimulatorState' in html
+    assert 'sendPlayerUpdate(dt);' in html
+    assert 'const updateInterval = mobileProfile ? 1 / 15 : 1 / 30;' in html
     assert 'const CONFIG_VERSION = 4;' in html
     assert 'id="roll-center" value="100"' in html
     assert 'id="roll-max" value="900"' in html
