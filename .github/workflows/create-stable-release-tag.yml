@@ -1,0 +1,43 @@
+name: Create stable release tag
+
+on:
+  push:
+    branches:
+      - feat/mobile-fpv-flight-deck
+    paths:
+      - .github/workflows/create-stable-release-tag.yml
+
+permissions:
+  contents: write
+
+jobs:
+  tag-release:
+    if: contains(github.event.head_commit.message, '[release]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create v3.3.0 tag once
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: v3.3.0
+        with:
+          script: |
+            const tag = process.env.RELEASE_TAG;
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${tag}`,
+              });
+              core.info(`${tag} already exists; nothing to do.`);
+              return;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/tags/${tag}`,
+              sha: context.sha,
+            });
+            core.info(`Created ${tag} at ${context.sha}.`);
