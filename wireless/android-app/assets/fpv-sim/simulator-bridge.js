@@ -28,11 +28,10 @@
     }
 
     function isRawRcFrame(values) {
-        return values.some(function (value) { return Math.abs(Number(value) || 0) > 4; }) &&
-            values.every(function (value) {
-                var number = Number(value);
-                return Number.isFinite(number) && number >= 0 && number <= 2048;
-            });
+        return values.every(function (value) {
+            var number = Number(value);
+            return Number.isFinite(number) && number >= 364 && number <= 1684;
+        });
     }
 
     function normalizeRcAxis(value, rawFrame) {
@@ -84,9 +83,11 @@
         window.dispatchEvent(event);
     }
 
-    window.setRcn1cFrame = function (lx, ly, rx, ry, buttonMask, mode, packetsPerSecond) {
+    window.setRcn1cFrame = function (lx, ly, rx, ry, buttonMask, mode, packetsPerSecond, rawFrameHint) {
         var values = [lx, ly, rx, ry];
-        var rawFrame = isRawRcFrame(values);
+        var rawFrame = typeof rawFrameHint === 'boolean'
+            ? rawFrameHint
+            : isRawRcFrame(values);
         state.lx = normalizeRcAxis(lx, rawFrame);
         state.ly = normalizeRcAxis(ly, rawFrame);
         state.rx = normalizeRcAxis(rx, rawFrame);
@@ -198,7 +199,8 @@
                     (Number(message.ry) || 0) * 32767,
                     Number(message.button_mask) || 0x1000,
                     modeCode(message.mode),
-                    Number(message.pps) || 0
+                    Number(message.pps) || 0,
+                    false
                 );
                 window.setRcn1cStatus(
                     'PC · ' + (message.port || 'bridge attivo'),

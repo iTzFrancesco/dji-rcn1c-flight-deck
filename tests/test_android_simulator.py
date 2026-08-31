@@ -35,15 +35,19 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'stopAndWait(500L)' in source
     assert 'readerDeviceId' in source
     assert 'setRcn1cFrame(' in source
+    assert 'isSimulatorDashboard' in source
+    assert 'finish();' in source
     assert 'dispatchGesture' not in source
     assert 'AccessibilityService' not in source
     assert 'audio/wav' in source
     assert 'isTextMime' in source
     assert 'TextView' not in source
-    assert 'FRAME_PUSH_MS = 20L' in source
+    assert 'FRAME_PUSH_MS = 33L' in source
+    assert 'private void setScreenOn' in source
     assert 'lastPushedPacketCount' in source
 
     reader = (PACKAGE / 'Rcn1cUsbReader.java').read_text(encoding='utf-8')
+    assert 'THREAD_PRIORITY_DISPLAY' in reader
     assert 'controlTransfer' in reader
     assert 'firstIn' in reader and 'firstOut' in reader
     assert 'stopAndWait' in reader
@@ -53,8 +57,8 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'SimulatorActivity.class' in main
 
     gradle = (ANDROID / 'build.gradle.kts').read_text(encoding='utf-8')
-    assert 'versionCode = 28' in gradle
-    assert 'versionName = "3.3.2"' in gradle
+    assert 'versionCode = 29' in gradle
+    assert 'versionName = "3.3.3"' in gradle
     assert 'assets.srcDirs("assets")' in gradle
     assert 'syncFpvSimAssets' in gradle
     assert 'preBuild' in gradle
@@ -75,8 +79,9 @@ def test_mobile_simulator_surface_is_local_and_directly_connected_to_rc():
     assert 'id="quick-controls"' not in html
     assert 'id="hud"' not in html
     assert 'id="rcn1c-bridge-status"' not in html
-    assert 'Premi <strong>RESET</strong> per ripartire' in html
+    assert 'Premi <strong>RESET</strong> o tocca lo schermo per ripartire' in html
     assert 'const controlSensitivity = mobileProfile ? 1.12 : 1.0;' in html
+    assert 'const mobileFrameIntervalMs = mobileProfile ? 1000 / 30 : 0;' in html
     assert 'if (deflection < 0.02) return 0;' not in html
     assert 'const renderPixelRatio = mobileProfile' in html
     assert 'const scatteredBlockCount = mobileProfile ? 12 : 30;' in html
@@ -126,6 +131,12 @@ def test_simulator_bridge_runtime_fails_safe_when_rc_is_absent_or_detached():
         assert.deepStrictEqual(window.getRcn1cFlightControls(), {
           connected: true, yaw: 0, throttle: 1, roll: 0, pitch: 0
         });
+        window.setRcn1cFrame(0, 328, 0, 0, 0, 1, 120.0);
+        const onePercent = window.getRcn1cFlightControls();
+        assert.ok(Math.abs(onePercent.yaw) < 1e-9,
+          JSON.stringify(onePercent));
+        assert.ok(Math.abs(onePercent.throttle + (328 / 32767)) < 1e-9,
+          JSON.stringify(onePercent));
         window.setRcn1cStatus('RC scollegato', false);
         assert.deepStrictEqual(window.getRcn1cGamepads()[0].axes, [0, 1, 0, 0]);
         assert.deepStrictEqual(events, ['gamepadconnected', 'gamepaddisconnected']);

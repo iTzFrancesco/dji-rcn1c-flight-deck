@@ -86,6 +86,12 @@ the RC connected to the lower port through an OTG adapter, and USB permission gr
 training environment is intentionally a single freestyle map: there is no race, timer, lap, or gate
 objective. Additional practice aids can follow validation of the axes and performance on the Oppo A53s.
 
+USB power note: Android host mode powers the connected USB device, so a regular app cannot disable
+the phone-to-RC VBUS line while keeping the data connection open. The simulator limits mobile rendering
+and frame delivery to reduce software-side battery use and only requests an always-on screen while
+RC frames are arriving. For longer sessions, use a powered OTG hub or a verified power-isolating/data
+adapter; support depends on the phone and accessory hardware.
+
 Building the APK requires JDK 17, Android SDK 34, and Gradle 8.7+.
 
 ## Updates

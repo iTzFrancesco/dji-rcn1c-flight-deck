@@ -147,7 +147,7 @@ public final class Rcn1cUsbReader {
     }
 
     private void run(UsbDevice device) {
-        Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY);
+        Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY);
         UsbDeviceConnection connection = null;
         UsbInterface claimed = null;
         String stopReason = "Fermato";

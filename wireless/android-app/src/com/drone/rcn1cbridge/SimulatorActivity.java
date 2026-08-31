@@ -34,7 +34,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
     private static final String LOCAL_ASSET_BASE = "https://appassets.androidplatform.net/assets/fpv-sim/";
     private static final String LOCAL_ASSET_HOST = "appassets.androidplatform.net";
     private static final long RETRY_MS = 1200L;
-    private static final long FRAME_PUSH_MS = 20L;
+    private static final long FRAME_PUSH_MS = 33L;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private volatile Rcn1cUsbReader.Frame latestFrame;
@@ -42,6 +42,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
     private volatile boolean closing;
     private volatile int readerDeviceId = -1;
     private boolean frameStreamConnected;
+    private volatile boolean screenOnRequested;
     private long lastPushedPacketCount = -1L;
 
     private WebView webView;
@@ -78,6 +79,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
                         || detached.getDeviceId() != readerDeviceId) return;
                 latestFrame = null;
                 frameStreamConnected = false;
+                ui.post(() -> setScreenOn(false));
                 if (reader != null) reader.stop();
                 postStatus("RC scollegato · collega di nuovo il radiocomando");
             }
@@ -87,7 +89,6 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         buildUi();
 
         IntentFilter filter = new IntentFilter();
@@ -111,6 +112,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         ui.removeCallbacks(retryReader);
         ui.removeCallbacks(framePump);
         latestFrame = null;
+        setScreenOn(false);
         if (reader != null) reader.stopAndWait(500L);
         try {
             unregisterReceiver(usbReceiver);
@@ -140,7 +142,12 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return !isLocalAsset(request.getUrl());
+                Uri uri = request.getUrl();
+                if (isSimulatorDashboard(uri)) {
+                    finish();
+                    return true;
+                }
+                return !isLocalAsset(uri);
             }
 
             @Override
@@ -219,7 +226,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         lastPushedPacketCount = frame.packetCount;
         frameStreamConnected = true;
         String script = String.format(Locale.US,
-                "window.setRcn1cFrame(%d,%d,%d,%d,%d,%d,%.1f);",
+                "window.setRcn1cFrame(%d,%d,%d,%d,%d,%d,%.1f,true);",
                 frame.lx, frame.ly, frame.rx, frame.ry,
                 frame.buttonMask, frame.mode, frame.packetsPerSecond);
         webView.evaluateJavascript(script, null);
@@ -233,6 +240,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
     @Override
     public void onFrame(Rcn1cUsbReader.Frame frame) {
         latestFrame = frame;
+        if (!screenOnRequested) ui.post(() -> setScreenOn(true));
     }
 
     @Override
@@ -242,6 +250,7 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
             lastPushedPacketCount = -1L;
             frameStreamConnected = false;
             readerDeviceId = -1;
+            ui.post(() -> setScreenOn(false));
             postStatus("Lettore fermo · " + reason);
             scheduleReaderRetry();
         }
@@ -263,6 +272,16 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
         if (!closing) ui.postDelayed(retryReader, RETRY_MS);
     }
 
+    private void setScreenOn(boolean keepOn) {
+        if (screenOnRequested == keepOn) return;
+        screenOnRequested = keepOn;
+        if (keepOn) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    }
+
     @SuppressWarnings("deprecation")
     private UsbDevice detachedDevice(Intent intent) {
         if (Build.VERSION.SDK_INT >= 33) {
@@ -276,6 +295,13 @@ public final class SimulatorActivity extends Activity implements Rcn1cUsbReader.
                 || !LOCAL_ASSET_HOST.equals(uri.getHost())) return false;
         String path = uri.getPath();
         return path != null && path.startsWith("/assets/fpv-sim/") && !path.contains("..");
+    }
+
+    private boolean isSimulatorDashboard(Uri uri) {
+        if (uri == null || !"https".equals(uri.getScheme())
+                || !LOCAL_ASSET_HOST.equals(uri.getHost())) return false;
+        String path = uri.getPath();
+        return path == null || path.isEmpty() || "/".equals(path);
     }
 
     private WebResourceResponse openLocalAsset(Uri uri) {

@@ -73,9 +73,10 @@ def test_simulator_stays_local_and_lightweight():
     assert 'id="quick-controls"' not in html
     assert 'id="hud"' not in html
     assert 'id="rcn1c-bridge-status"' not in html
-    assert 'Premi <strong>RESET</strong> per ripartire' in html
+    assert 'Premi <strong>RESET</strong> o tocca lo schermo per ripartire' in html
     assert 'z-index: 90;' in html
     assert 'const controlSensitivity = mobileProfile ? 1.12 : 1.0;' in html
+    assert 'const mobileFrameIntervalMs = mobileProfile ? 1000 / 30 : 0;' in html
     assert 'function filterControl(value, axis, dt)' in html
     assert 'if (deflection < 0.02) return 0;' not in html
     assert 'const renderPixelRatio = mobileProfile' in html
@@ -181,6 +182,9 @@ def test_pc_simulator_has_stronger_throttle_and_local_drone_audio():
     assert 'maxSpeed: 48' in html
     assert "audio/fan_interval.wav" in audio
     assert "audio/propeller_cartoon_loop.wav" not in audio
+    assert 'createBiquadFilter' in audio
+    assert 'startToneVoices' in audio
+    assert 'motorFilter.frequency' in audio
     assert (PC_SIM / 'audio' / 'fan_interval.wav').stat().st_size > 100_000
     assert not (PC_SIM / 'audio' / 'propeller_cartoon_loop.wav').exists()
 

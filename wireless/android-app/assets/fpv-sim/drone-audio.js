@@ -4,8 +4,11 @@
     var context = null;
     var master = null;
     var motorBus = null;
+    var motorFilter = null;
+    var toneBus = null;
     var motorSource = null;
     var fallbackMotors = [];
+    var toneVoices = [];
     var fallbackStarted = false;
     var loopsStarted = false;
     var enabled = true;
@@ -37,12 +40,27 @@
             compressor.connect(context.destination);
 
             motorBus = context.createGain();
-            motorBus.connect(master);
+            if (typeof context.createBiquadFilter === 'function') {
+                motorFilter = context.createBiquadFilter();
+                motorFilter.type = 'lowpass';
+                motorFilter.frequency.value = 1900;
+                motorFilter.Q.value = 0.65;
+                motorBus.connect(motorFilter);
+                motorFilter.connect(master);
+            } else {
+                motorBus.connect(master);
+            }
+            toneBus = context.createGain();
+            toneBus.connect(motorFilter || master);
+            startToneVoices();
             return true;
         } catch (error) {
             context = null;
             master = null;
             motorBus = null;
+            motorFilter = null;
+            toneBus = null;
+            toneVoices = [];
             return false;
         }
     }
@@ -87,6 +105,21 @@
         fallbackStarted = true;
     }
 
+    function startToneVoices() {
+        if (toneVoices.length || !context || !toneBus) return;
+        [-5, -1.7, 1.7, 5].forEach(function (detune) {
+            var oscillator = context.createOscillator();
+            var gain = context.createGain();
+            oscillator.type = 'triangle';
+            oscillator.detune.value = detune;
+            gain.gain.value = 0;
+            oscillator.connect(gain);
+            gain.connect(toneBus);
+            oscillator.start();
+            toneVoices.push({ oscillator: oscillator, gain: gain });
+        });
+    }
+
     function startSampleLoop(buffer, bus) {
         if (!context || !buffer || !bus) return null;
         var source = context.createBufferSource();
@@ -102,15 +135,23 @@
         var throttle = clamp(lastThrottle, 0, 1);
         var speed = clamp(lastSpeed, 0, 55);
         var active = enabled ? 1 : 0;
-        // Liftoff-like: lower overall volume, no bubbly low-rate loop, smoother falloff for props idle
-        var motorLevel = active * (0.11 + throttle * 0.26);
+        // Keep the fan recording as the body, then open the filter and add a
+        // very quiet harmonic layer as throttle rises. This avoids the bubbly
+        // low-rate texture while preserving a usable WebView fallback.
+        var motorLevel = active * (0.08 + throttle * 0.22);
         var motorRate = 1.08 + throttle * 1.18 + speed * 0.007;
-        setParam(master.gain, active ? 0.30 : 0, 0.07);
+        setParam(master.gain, active ? 0.24 : 0, 0.07);
         setParam(motorBus.gain, motorLevel, 0.05);
+        setParam(toneBus && toneBus.gain, active ? 0.06 + throttle * 0.08 : 0, 0.08);
+        setParam(motorFilter && motorFilter.frequency, 1800 + throttle * 4300 + speed * 24, 0.10);
         if (motorSource) setParam(motorSource.playbackRate, motorRate, 0.05);
         fallbackMotors.forEach(function (motor, index) {
-            setParam(motor.oscillator.frequency, 138 + throttle * 220 + speed * 1.6 + index * 1.2, 0.04);
-            setParam(motor.gain, active ? 0.11 : 0, 0.04);
+            setParam(motor.oscillator.frequency, 150 + throttle * 250 + speed * 1.6 + index * 1.2, 0.04);
+            setParam(motor.gain, active ? 0.075 : 0, 0.04);
+        });
+        toneVoices.forEach(function (voice, index) {
+            setParam(voice.oscillator.frequency, 155 + throttle * 285 + speed * 1.4 + index * 1.4, 0.06);
+            setParam(voice.gain, active ? 0.20 : 0, 0.06);
         });
     }
 

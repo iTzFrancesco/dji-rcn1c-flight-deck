@@ -194,6 +194,9 @@
             flex-direction: column;
             z-index: 80;
             backdrop-filter: blur(3px);
+            cursor: pointer;
+            touch-action: manipulation;
+            user-select: none;
         }
         #crash-overlay h1 {
             font-size: 4rem;
@@ -410,9 +413,9 @@
         <div id="flight-reticle" aria-hidden="true"></div>
 
         <!-- Crash Overlay -->
-        <div id="crash-overlay">
+        <div id="crash-overlay" role="button" tabindex="0" aria-label="Tocca lo schermo per ripartire">
             <h1>CRASHED!</h1>
-            <p>Premi <strong>RESET</strong> per ripartire</p>
+            <p>Premi <strong>RESET</strong> o tocca lo schermo per ripartire</p>
         </div>
 
     </div>
@@ -443,6 +446,8 @@
             (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
         const controlSensitivity = mobileProfile ? 1.12 : 1.0;
         const controlResponse = mobileProfile ? 26 : 34;
+        const throttleResponse = mobileProfile ? 18 : 22;
+        const mobileFrameIntervalMs = mobileProfile ? 1000 / 30 : 0;
         const filteredControls = { roll: 0, pitch: 0, yaw: 0, throttle: 0 };
 
         function filterControl(value, axis, dt) {
@@ -452,11 +457,15 @@
                 1
             );
             const boundedDt = Math.min(Math.max(Number(dt) || 0, 0), 0.05);
-            const response = 1 - Math.exp(-boundedDt * controlResponse);
+            const responseRate = axis === 'throttle' ? throttleResponse : controlResponse;
+            const response = 1 - Math.exp(-boundedDt * responseRate);
             filteredControls[axis] += (target - filteredControls[axis]) * response;
 
-            // Full-stick endpoints should never feel soft or undershoot.
-            if (Math.abs(target) >= 0.999) filteredControls[axis] = target;
+            // Rotation endpoints are immediate; throttle gets a short ramp so
+            // altitude never jumps because one packet reached the endpoint.
+            if (axis !== 'throttle' && Math.abs(target) >= 0.999) {
+                filteredControls[axis] = target;
+            }
             return filteredControls[axis];
         }
 
@@ -1533,6 +1542,7 @@
             physics.position.copy(spawnPoint);
             physics.velocity.set(0, 0, 0);
             physics.crashed = false;
+            Object.keys(filteredControls).forEach(axis => filteredControls[axis] = 0);
             droneGroup.rotation.set(0, 0, 0);
             droneGroup.position.copy(spawnPoint);
 
@@ -1561,6 +1571,23 @@
 
         const thrustDirection = new THREE.Vector3();
         const acceleration = new THREE.Vector3();
+
+        function throttleToThrust(throttleInput) {
+            const throttle01 = THREE.MathUtils.clamp(
+                (THREE.MathUtils.clamp(Number(throttleInput) || 0, -1, 1) + 1) / 2,
+                0,
+                1
+            );
+            const hover = physics.hoverThrottle || 0.50;
+            const curve = 1.18;
+            const maxExtraThrust = (physics.throttleAuthority || 96.4) * (1 - hover);
+            if (throttle01 >= hover) {
+                const climbDeflection = (throttle01 - hover) / (1 - hover);
+                return physics.gravity + Math.pow(climbDeflection, curve) * maxExtraThrust;
+            }
+            const descentDeflection = (hover - throttle01) / hover;
+            return physics.gravity * (1 - Math.pow(descentDeflection, curve));
+        }
 
         // --- 14. PHYSICS UPDATE ---
         function updatePhysics(dt, rawRoll, rawPitch, rawYaw, rawThrottle) {
@@ -1596,16 +1623,13 @@
             const throttleInput = THREE.MathUtils.clamp(Number(rawThrottle) || 0, -1, 1);
             const throttle01 = (throttleInput + 1) / 2;
             const hover = physics.hoverThrottle || 0.50;
-            let thrustMagnitude;
-            if (throttle01 >= hover) {
-                const scale = (physics.maxThrust - physics.gravity) / (1 - hover);
-                thrustMagnitude = physics.gravity + (throttle01 - hover) * scale;
-            } else {
-                thrustMagnitude = (throttle01 / hover) * physics.gravity;
-            }
-            thrustMagnitude = THREE.MathUtils.clamp(thrustMagnitude, 0, physics.maxThrust);
+            const thrustMagnitude = THREE.MathUtils.clamp(
+                throttleToThrust(throttleInput),
+                0,
+                physics.maxThrust
+            );
             const descentDeflection = Math.max(0, (hover - throttle01) / hover);
-            const descentAssist = descentDeflection * physics.fallAssist;
+            const descentAssist = Math.pow(descentDeflection, 1.18) * physics.fallAssist;
 
             // Get drone's up vector (local Y in world space)
             thrustDirection.set(0, 1, 0).applyQuaternion(droneGroup.quaternion);
@@ -1749,6 +1773,19 @@
         document.getElementById('quick-reset').addEventListener('click', () => {
             resetDrone();
         });
+        const crashOverlay = document.getElementById('crash-overlay');
+        crashOverlay.addEventListener('pointerup', (event) => {
+            if (event.button !== undefined && event.button !== 0) return;
+            if (!physics.crashed) return;
+            event.preventDefault();
+            resetDrone();
+        });
+        crashOverlay.addEventListener('keydown', (event) => {
+            if ((event.key === 'Enter' || event.key === ' ') && physics.crashed) {
+                event.preventDefault();
+                resetDrone();
+            }
+        });
         window.addEventListener('pointerdown', () => {
             armMotorAudio();
         }, { once: true, passive: true });
@@ -1831,6 +1868,7 @@
 
         // --- 21. MAIN ANIMATION LOOP ---
         const clock = new THREE.Clock();
+        let lastAnimationFrameAt = 0;
         const simulatorFrameState = {
             throttleInput: 0,
             throttle01: 0,
@@ -1842,11 +1880,16 @@
             throttleInput: simulatorFrameState.throttleInput,
             throttle01: simulatorFrameState.throttle01,
             hasInput: simulatorFrameState.hasInput,
+            verticalSpeed: physics.velocity.y,
             crashed: physics.crashed
         });
 
-        function animate() {
+        function animate(frameTime) {
             requestAnimationFrame(animate);
+            const now = Number.isFinite(frameTime) ? frameTime : performance.now();
+            if (mobileFrameIntervalMs > 0 && lastAnimationFrameAt > 0 &&
+                now - lastAnimationFrameAt < mobileFrameIntervalMs) return;
+            lastAnimationFrameAt = now;
             const dt = clock.getDelta();
 
             let rawRoll = 0, rawPitch = 0, rawYaw = 0, rawThrottle = 0;

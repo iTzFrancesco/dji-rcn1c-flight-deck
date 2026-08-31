@@ -1,13 +1,11 @@
 """Real browser smoke test for the shared desktop/Android FPV simulator assets."""
 
 import os
-import asyncio
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
-import websockets
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,47 +20,9 @@ class QuietStaticHandler(SimpleHTTPRequestHandler):
         pass
 
 
-def start_desktop_bridge_probe():
-    """Keep the simulator's optional desktop bridge healthy during the browser test."""
-    ready = threading.Event()
-    stop = threading.Event()
-    failure = []
-
-    def run():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        async def handler(websocket):
-            await websocket.wait_closed()
-
-        async def serve_until_stopped():
-            try:
-                server = await websockets.serve(handler, '127.0.0.1', 8124)
-                ready.set()
-                while not stop.is_set():
-                    await asyncio.sleep(0.05)
-                server.close()
-                await server.wait_closed()
-            except Exception as error:
-                failure.append(error)
-                ready.set()
-
-        loop.run_until_complete(serve_until_stopped())
-        loop.close()
-
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
-    if not ready.wait(5):
-        raise RuntimeError('desktop bridge probe did not start')
-    if failure:
-        raise failure[0]
-    return stop, thread
-
-
 def main():
     server = ThreadingHTTPServer(('127.0.0.1', 0), QuietStaticHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    ws_stop, ws_thread = start_desktop_bridge_probe()
     errors = []
 
     try:
@@ -80,6 +40,9 @@ def main():
             page.on('pageerror', lambda error: errors.append(f'pageerror: {error}'))
             page.on('console', lambda message: errors.append(f'console error: {message.text}')
                      if message.type == 'error' else None)
+            # This smoke test injects direct RC frames. Avoid coupling it to
+            # the user's already-running desktop dashboard on port 8124.
+            page.add_init_script("Object.defineProperty(window, 'WebSocket', { value: undefined });")
 
             page.goto(
                 f'http://127.0.0.1:{server.server_port}/fpv-sim/',
@@ -115,6 +78,16 @@ def main():
             center_altitude = float(center_state['altitude'])
             assert abs(center_altitude - 5.0) < 0.2, center_altitude
 
+            # Full throttle should ramp into the vertical model instead of
+            # teleporting the filtered input to an endpoint in one frame.
+            page.evaluate('window.setRcn1cFrame(1024, 1684, 1024, 1024, 0x1000, 1, 120, true)')
+            page.wait_for_timeout(50)
+            early_throttle_state = page.evaluate('window.getFpvSimulatorState()')
+            assert 0.05 < float(early_throttle_state['throttleInput']) < 0.95, early_throttle_state
+            page.evaluate('window.setRcn1cFrame(1024, 1024, 1024, 1024, 0x1000, 1, 120, true)')
+            page.get_by_role('button', name='RESET').click()
+            page.wait_for_timeout(150)
+
             # Small stick motion must remain live; this guards against a
             # reintroduced hard dead zone while the response filter settles.
             page.evaluate('window.setRcn1cFrame(1024, 958, 1024, 1024, 0x1000, 1, 120)')
@@ -131,7 +104,7 @@ def main():
             assert down_controls['throttle'] == 1
             page.wait_for_timeout(120)
             down_state = page.evaluate('window.getFpvSimulatorState()')
-            assert down_state['throttleInput'] == -1
+            assert -1 < down_state['throttleInput'] < -0.75
             assert down_state['altitude'] < center_altitude, (center_altitude, down_state)
 
             page.evaluate('window.setRcn1cFrame(1024, 1684, 1024, 1024, 0x1000, 1, 120)')
@@ -139,7 +112,7 @@ def main():
             assert up_controls['throttle'] == -1
             page.wait_for_timeout(750)
             lifted_state = page.evaluate('window.getFpvSimulatorState()')
-            assert lifted_state['throttleInput'] == 1
+            assert 0.95 < lifted_state['throttleInput'] <= 1
             assert lifted_state['altitude'] > center_altitude + 0.05, (center_altitude, lifted_state)
 
             page.evaluate('window.setRcn1cFrame(1024, 1024, 1024, 1024, 0x1000, 1, 120)')
@@ -163,18 +136,16 @@ def main():
             page.wait_for_timeout(1000)
             assert page.locator('#crash-overlay').evaluate("el => getComputedStyle(el).display") == 'flex'
             crash_text = ' '.join(page.locator('#crash-overlay').inner_text().split())
-            assert crash_text == 'CRASHED! Premi RESET per ripartire'
+            assert crash_text == 'CRASHED! Premi RESET o tocca lo schermo per ripartire'
             assert page.get_by_role('button', name='RESET').is_visible()
             page.evaluate('window.setRcn1cFrame(1024, 1024, 1024, 1024, 0x1000, 1, 120)')
-            page.get_by_role('button', name='RESET').click()
+            page.mouse.click(8, 8)
             page.wait_for_timeout(150)
             assert page.locator('#crash-overlay').evaluate("el => getComputedStyle(el).display") == 'none'
             assert abs(float(page.evaluate('window.getFpvSimulatorState().altitude')) - 5.0) < 0.2
             assert not errors, '; '.join(errors)
             browser.close()
     finally:
-        ws_stop.set()
-        ws_thread.join(timeout=5)
         server.shutdown()
         server.server_close()
 
