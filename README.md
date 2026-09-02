@@ -1,8 +1,10 @@
-# DJI RC-N1C Flight Deck
+# DJI RC-N1C Flight Deck for Windows and Android
 
 Unofficial open-source bridge for using the **DJI RC-N1C** remote controller with flight simulators on PC and Android.
 
 > The repository/project is called **Flight Deck**; the Android app is called **RC-N1C Flight Bridge**.
+
+[![RC-N1C Flight Deck dashboard preview](docs/media/flight-deck-demo.gif)](docs/media/flight-deck-demo.mp4)
 
 The project provides:
 
@@ -47,10 +49,6 @@ opens the dashboard, and automatically creates the virtual Xbox controller. In U
 process, so the protocol serial port is not opened simultaneously by the dashboard and the bridge.
 
 The dashboard runs locally and does not use external services or resources.
-
-## Demo
-
-[![RC-N1C Flight Deck dashboard preview](docs/media/flight-deck-demo.gif)](docs/media/flight-deck-demo.mp4)
 
 Click the preview to open the full recording.
 
