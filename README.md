@@ -1,10 +1,34 @@
-# DJI RC-N1C Flight Deck for Windows and Android
+<h1 align="center">DJI RC-N1C Flight Deck</h1>
+
+<p align="center">
+  <strong>Open-source RC-N1C bridge for Windows simulators and Android.</strong><br/>
+  Connect the controller, inspect live input, and practice with a local FPV simulator.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-Windows-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Platform: Windows" />
+  <img src="https://img.shields.io/badge/platform-Android-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform: Android" />
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.12" />
+  <img src="https://img.shields.io/badge/license-MIT-4493F8?style=flat-square" alt="License: MIT" />
+</p>
+
+<p align="center">
+  <a href="#supported-controls">Controls</a> ·
+  <a href="#getting-started-on-windows">Windows</a> ·
+  <a href="#android-app-rc-n1c-flight-bridge">Android</a> ·
+  <a href="docs/">Documentation</a> ·
+  <a href="LICENSE">MIT License</a>
+</p>
+
+<p align="center">
+  <a href="docs/media/flight-deck-demo.mp4">
+    <img src="docs/media/flight-deck-demo.gif" alt="RC-N1C Flight Deck dashboard preview" width="900" />
+  </a>
+</p>
 
 Unofficial open-source bridge for using the **DJI RC-N1C** remote controller with flight simulators on PC and Android.
 
 > The repository/project is called **Flight Deck**; the Android app is called **RC-N1C Flight Bridge**.
-
-[![RC-N1C Flight Deck dashboard preview](docs/media/flight-deck-demo.gif)](docs/media/flight-deck-demo.mp4)
 
 The project provides:
 
