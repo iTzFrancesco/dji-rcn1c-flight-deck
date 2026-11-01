@@ -68,9 +68,10 @@ Close any DJI applications that may be using the USB connection, then use one of
 - `viz_app\AVVIA_VIZ.bat` — opens the dashboard and automatically detects the remote controller;
 - `AVVIA_BUTTON_LIVE_PROBE.bat` — displays detected buttons without creating a gamepad.
 
-The `RC-N1C Dashboard.vbs` Desktop shortcut is the one-click launcher: it detects USB or Wi-Fi,
-opens the dashboard, and automatically creates the virtual Xbox controller. In USB mode it uses a single
-process, so the protocol serial port is not opened simultaneously by the dashboard and the bridge.
+The `RC-N1C Dashboard.vbs` launcher is the one-click entry point: it detects USB or Wi-Fi,
+opens the dashboard in the default browser, and automatically creates the virtual Xbox controller.
+In USB mode it uses a single process, so the protocol serial port is not opened simultaneously by
+the dashboard and the bridge.
 
 The dashboard runs locally and does not use external services or resources.
 

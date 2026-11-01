@@ -40,12 +40,12 @@ Guidance for using the real **DJI RC-N1C** remote controller with drone flight s
 | `wireless/button_live_probe.py` | Live monitor for the DUML `0x27` button frame without creating a virtual gamepad. |
 | `rcn1c_protocol.py` | Shared constants and decoders for sticks, buttons, and flight modes. |
 | `rcn1c_transport.py` | UDP v1/v2/v3 transport format between Android/Termux and the PC. |
-| `wireless/RCN1C_Bridge.apk` | Ready-to-install Android app (v3.0): USB serial input, live buttons/mode, and UDP autodiscovery. |
+| `wireless/RCN1C_Bridge.apk` | Bundled installable Android APK (v3.3.0-beta13); the source build config is v6.0.0. It provides USB serial input, live buttons/mode, and UDP autodiscovery. |
 | `wireless/android-app/` | Android app source (Java) and `build_apk.ps1` build script. |
 | `wireless/rcn1c_wifi_rx_pc.py` | PC receiver: UDP port 26789 → virtual Xbox gamepad (sticks, wheel, and buttons). |
 | `tests/run_all.py` | Full test suite: `py_compile` plus receiver/dashboard tests (`python tests\\run_all.py`; the suite should pass). |
 | `AVVIA_WIFI_BRIDGE.bat` | Wi-Fi receiver launcher. |
-| **Desktop: `RC-N1C Dashboard.vbs`** | One-click launcher for the server console and Chrome dashboard; it closes and restarts the components as needed. |
+| `RC-N1C Dashboard.vbs` | One-click launcher for the server console and dashboard in the default browser; it closes and restarts the components as needed. |
 | `sandbox_read_test.py` | Four-stage guided serial diagnostic (left stick, right stick, wheel, and center). |
 | `viz_app/controller_viz.py` | Control Center server: serial (`--source serial`, default) or Wi-Fi (`--source udp`, including the virtual gamepad), HTTP on port 8123, WebSocket on port 8124, and recording API (`/api/rec/start|stop|status`, with red REC OSD in the dashboard). |
 | `viz_app/AVVIA_VIZ_WIFI.bat` | Wireless dashboard launcher. |
