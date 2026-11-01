@@ -33,7 +33,7 @@ Guidance for using the real **DJI RC-N1C** remote controller with drone flight s
 | `dji_rcn1c_bridge.py` | RC → virtual Xbox 360 gamepad bridge through ViGEm. Runs indefinitely or with `--duration N`. |
 | `AVVIA_BRIDGE.bat` | Daily launcher for the bridge. |
 | `registra_volo.py` | FPV session recorder: FFmpeg screen capture (H.264, CRF 18, embedded `REC mm:ss.mmm` OSD, watchdog for long sessions) plus 100 Hz XInput logging in `registrazioni/` (synchronised MP4, CSV, and JSON). Supports `--duration N`, `--log-only`, `--no-osd`, `--window <title>`, `--crf`, and `--fps`; also exposes the `Recorder` class used by the dashboard. See `registrazioni/AGENTS.md`. |
-| `analizza_volo.py` | Session analyser that processes the complete log and video: lap storyboard plus events with frames before, during, and after each event. `python analizza_volo.py [session] [--every 3]` writes `registrazioni/analisi_volo_<timestamp>/report.html`. |
+| `analizza_volo.py` | Session analyser that processes every CSV row, builds a video storyboard sampled at a fixed interval (3 seconds by default), and adds frames before, during, and after detected events. `python analizza_volo.py [session] [--every 3]` writes `registrazioni/analisi_volo_<timestamp>/report.html`. |
 | `AVVIA_REGISTRAZIONE.bat` | Flight-recorder launcher; stop with `Q` followed by Enter. |
 | `wireless/rcn1c_phone_tx.py` | Phone-side Termux script: reads the RC USB serial connection and forwards sticks, wheel, and buttons to the PC over UDP. |
 | `wireless/button_probe_27.py` | Guided probe for the DUML `0x27` button frame with a mapping report. |
@@ -105,7 +105,7 @@ py -3.12 viz_app/test_viz.py              # self-test (expected to pass)
 - The camera wheel maps to virtual A/B buttons beyond approximately ±15% from center; this can change Windows focus or screens and is expected.
 - The bridge publishes an `XBOX 360 For Windows` controller. Select that controller in the simulator's input settings.
 - If input is limited to approximately 30 packets per second, check for other consumers on the port and verify that the high baud rate is configured.
-- `registra_volo.py` reads the gamepad through XInput and does not lock the serial or UDP input. If the video is black, switch the simulator from exclusive fullscreen to borderless windowed mode. Start the bridge before recording, otherwise the stick log will contain zeros. The embedded REC OSD matches `t_s` in the CSV. Analyses cover every CSV row and every video second.
+- `registra_volo.py` reads the gamepad through XInput and does not lock the serial or UDP input. If the video is black, switch the simulator from exclusive fullscreen to borderless windowed mode. Start the bridge before recording, otherwise the stick log will contain zeros. The embedded REC OSD matches `t_s` in the CSV. Analyses process every CSV row and sample the full video at the selected fixed interval (3 seconds by default), with additional frames around detected events.
 
 ## Recommended simulator
 
