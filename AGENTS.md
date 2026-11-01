@@ -62,7 +62,7 @@ The RC-N1C does not provide a direct Wi-Fi or Bluetooth connection to the PC. Fo
 
 The v3 frame carries sticks, wheel, buttons, and flight mode.
 
-**Method 1 — Android app (recommended):** install `wireless/RCN1C_Bridge.apk` (v3.0, landscape orientation) on the phone and connect the powered-on RC through the **lower** USB-C port. Grant USB permission. Leave the IP field empty for autodiscovery or enter it manually. The app shows sticks, buttons, flight mode, packet rate, and RTT. On the PC, launch `AVVIA_WIFI_BRIDGE.bat`, or use `viz_app\\AVVIA_VIZ_WIFI.bat` to run the dashboard and virtual gamepad in one process. Do **not** run both receivers at the same time. Rebuild the app with `wireless/android-app/build_apk.ps1` after configuring the Android SDK.
+**Method 1 — Android app (recommended):** install `wireless/RCN1C_Bridge.apk` (landscape orientation) on the phone and connect the powered-on RC through the **lower** USB-C port. Grant USB permission, then tap `AVVIA` to start the bridge. Leave the IP field empty for autodiscovery or enter it manually before starting. The app shows sticks, buttons, flight mode, packet rate, and RTT. On the PC, launch `AVVIA_WIFI_BRIDGE.bat`, or use `viz_app\\AVVIA_VIZ_WIFI.bat` to run the dashboard and virtual gamepad in one process. Do **not** run both receivers at the same time. Rebuild the app with `wireless/android-app/build_apk.ps1` after configuring the Android SDK.
 
 **Method 2 — Termux:** install **Termux** and **Termux:API** from F-Droid, then run `pkg install python termux-api`.
 
